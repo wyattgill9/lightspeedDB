@@ -1,9 +1,8 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
-use std::sync::Arc;
 
 use bytemuck::{Pod, Zeroable};
 
-use db_core::database::{Database, FieldDefinition};
+use db_core::database::{Database, FieldDef};
 use db_core::error::Error;
 
 fn main() {
@@ -33,12 +32,12 @@ fn run() -> Result<(), Error> {
     ];
     let point_bytes: &[u8] = bytemuck::cast_slice(&points);
 
-    let database = Arc::new(Database::new());
+    let database = Database::new();
 
     database.create_table("vec3", &[
-        FieldDefinition { name: "x", type_name: "f32", },
-        FieldDefinition { name: "y", type_name: "f32", },
-        FieldDefinition { name: "z", type_name: "f32", },
+        FieldDef { name: "x", type_name: "f32", },
+        FieldDef { name: "y", type_name: "f32", },
+        FieldDef { name: "z", type_name: "f32", },
     ])?;
 
     database.insert("vec3", point_bytes)?;

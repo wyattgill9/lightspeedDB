@@ -12,7 +12,7 @@ use snafu::prelude::*;
 /// Named pair for defining a table column's name and type.
 ///
 /// Avoids same-type `(&str, &str)` ambiguity at call sites.
-pub struct FieldDefinition<'a> {
+pub struct FieldDef<'a> {
     pub name: &'a str,
     pub type_name: &'a str,
 }
@@ -38,7 +38,7 @@ impl Database {
     }
 
     /// Create a new table with the given field definitions.
-    pub fn create_table(&self, table_name: &str, fields: &[FieldDefinition<'_>]) -> Result<()> {
+    pub fn create_table(&self, table_name: &str, fields: &[FieldDef<'_>]) -> Result<()> {
         match self.tables.entry(table_name.to_owned()) {
             Entry::Occupied(_) => error::TableAlreadyExistsSnafu { table_name }.fail(),
             Entry::Vacant(entry) => {
