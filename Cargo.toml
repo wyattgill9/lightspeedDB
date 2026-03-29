@@ -8,6 +8,14 @@ repository = "https://github.com/wyattgill9/db"
 authors = ["Wyatt Gill <wyattgill01@outlook.com>"]
 
 [dependencies]
-parking_lot = "0.12.5"
-rustix      = "1.1.4"
-snafu       = "0.9.0"
+snafu        = "0.9.0"
+bytemuck     = { version = "1.25", features = ["derive"] }
+ahash        = "0.8.12"
+more-asserts = "0.3"
+
+[lints.rust]
+warnings    = "deny"
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
