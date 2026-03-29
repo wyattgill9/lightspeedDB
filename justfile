@@ -2,7 +2,7 @@ build:
     cargo build
 
 run:
-    cargo run
+    cargo run -p db-core
 
 check:
     cargo clippy

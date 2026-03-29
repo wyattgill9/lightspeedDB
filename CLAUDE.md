@@ -24,18 +24,6 @@ Style for instructions: terse, phraseal, algebraic, skimmable. Prefer invariants
 - All compiler warnings at strictest setting.
 - Explicitly pass options at call sites; never rely on library defaults.
 
-### Assertions
-
-- Assertions catch **programmer** errors. Corrupt code → crash.
-- Assert args, returns, pre/postconditions, invariants. Min **2 per function**.
-- **Pair assertions:** ≥2 code paths per property (e.g., before write + after read).
-- **Assert positive AND negative space.** Valid/invalid boundary is where bugs live.
-- Split compounds: `assert!(a); assert!(b);` over `assert!(a && b);`.
-- Implication: `if a { assert!(b); }`.
-- Assert compile-time constant relationships.
-- Use `debug_assert!` and `more_asserts` aggressively.
-- Mental model first → assertions → code → fuzzer as final defense.
-
 ### Error Discipline
 
 - Typed errors only; no bare `String`. `snafu` with source context.

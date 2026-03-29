@@ -14,16 +14,6 @@ impl std::fmt::Display for OutputTable {
 impl OutputTable {
     /// Build a formatted ASCII table from all row groups.
     pub fn from_table(table: &DatabaseTable) -> Self {
-        assert!(
-            !table.field_names().is_empty(),
-            "Table must have fields to format."
-        );
-        assert_eq!(
-            table.field_names().len(),
-            table.data_types().len(),
-            "Field count must equal data type count."
-        );
-
         // Decode every segment into flat rows (each row = Vec<String>).
         let mut rows: Vec<Vec<String>> = Vec::new();
         for segment in table.row_groups() {
@@ -72,35 +62,22 @@ impl OutputTable {
         output.push_str(&separator);
         output.push('\n');
 
-        debug_assert!(!output.is_empty(), "Formatted output must not be empty.");
         OutputTable { output }
     }
 }
 
 /// Build an ASCII separator line from column widths.
 fn format_separator(column_widths: &[usize]) -> String {
-    assert!(
-        !column_widths.is_empty(),
-        "Must have at least one column width."
-    );
     let inner: String = column_widths
         .iter()
         .map(|&width| "-".repeat(width + 2))
         .collect::<Vec<_>>()
         .join("+");
-    let result = format!("+{inner}+");
-    debug_assert!(!result.is_empty(), "Separator must not be empty.");
-    result
+    format!("+{inner}+")
 }
 
 /// Format a single row of cells padded to column widths.
 fn format_row(cells: &[String], column_widths: &[usize]) -> String {
-    assert_eq!(
-        cells.len(),
-        column_widths.len(),
-        "Cell count must equal column width count."
-    );
-    debug_assert!(!cells.is_empty(), "Row must have at least one cell.");
     let inner: String = cells
         .iter()
         .enumerate()

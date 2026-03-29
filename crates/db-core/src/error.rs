@@ -20,6 +20,9 @@ pub enum Error {
 
     #[snafu(display("table already exists: {table_name}"))]
     TableAlreadyExists { table_name: String },
+
+    #[snafu(display("segment full: capacity is {capacity_rows} rows"))]
+    SegmentCapacityExceeded { capacity_rows: u32 },
 }
 
 /// Crate-wide result alias.
