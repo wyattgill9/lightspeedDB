@@ -114,7 +114,7 @@ impl TableSegment {
 
 /// Core table structure holding schema and row group data.
 #[derive(Debug)]
-pub struct DatabaseTable {
+pub struct DBTable {
     id: TableId,
     name: String,
     field_names: Vec<String>,
@@ -122,7 +122,7 @@ pub struct DatabaseTable {
     row_groups: RwLock<Vec<TableSegment>>,
 }
 
-impl DatabaseTable {
+impl DBTable {
     /// Create a new table with one empty row group.
     pub fn new(
         id: TableId,

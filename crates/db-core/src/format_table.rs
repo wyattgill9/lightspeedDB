@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::table::DatabaseTable;
+use crate::table::DBTable;
 
 /// Formatted text representation of a table query result.
 pub struct OutputTable {
@@ -14,7 +14,7 @@ impl std::fmt::Display for OutputTable {
 
 impl OutputTable {
     /// Build a formatted ASCII table from all row groups.
-    pub fn from_table(table: &DatabaseTable) -> Result<Self> {
+    pub fn from_table(table: &DBTable) -> Result<Self> {
         let row_groups = table.row_groups_snapshot()?;
 
         // Decode every segment into flat rows (each row = Vec<String>).
@@ -76,6 +76,7 @@ fn format_separator(column_widths: &[usize]) -> String {
         .map(|&width| "-".repeat(width + 2))
         .collect::<Vec<_>>()
         .join("+");
+
     format!("+{inner}+")
 }
 
@@ -87,5 +88,6 @@ fn format_row(cells: &[String], column_widths: &[usize]) -> String {
         .map(|(index, cell)| format!(" {:width$} ", cell, width = column_widths[index]))
         .collect::<Vec<_>>()
         .join("|");
+
     format!("|{inner}|")
 }
