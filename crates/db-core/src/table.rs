@@ -1,3 +1,5 @@
+use std::sync::RwLock;
+
 use crate::dtype::DataTypeKind;
 use crate::error::{self, Result};
 
@@ -80,13 +82,15 @@ impl TableSegment {
             .fail();
         };
 
-        for row_index in 0..count_rows_new {
-            if self.row_count >= CAPACITY_ROWS_SEGMENT {
-                return error::SegmentCapacityExceededSnafu {
-                    capacity_rows: CAPACITY_ROWS_SEGMENT,
-                }
-                .fail();
+        let count_rows_available = (CAPACITY_ROWS_SEGMENT - self.row_count) as usize;
+        if count_rows_new > count_rows_available {
+            return error::SegmentCapacityExceededSnafu {
+                capacity_rows: CAPACITY_ROWS_SEGMENT,
             }
+            .fail();
+        }
+
+        for row_index in 0..count_rows_new {
             let mut offset = row_index * size_bytes_row;
             for (column_index, &width) in self.column_byte_widths.iter().enumerate() {
                 let end = offset + width;
@@ -109,13 +113,13 @@ impl TableSegment {
 }
 
 /// Core table structure holding schema and row group data.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct DatabaseTable {
     id: TableId,
     name: String,
     field_names: Vec<String>,
     data_types: Vec<DataTypeKind>,
-    row_groups: Vec<TableSegment>,
+    row_groups: RwLock<Vec<TableSegment>>,
 }
 
 impl DatabaseTable {
@@ -134,14 +138,27 @@ impl DatabaseTable {
             name,
             field_names,
             data_types,
-            row_groups,
+            row_groups: RwLock::new(row_groups),
         }
     }
 
     /// Insert tightly-packed row data into the active (last) row group.
-    pub fn insert(&mut self, bytes: &[u8]) -> Result<()> {
-        // row_groups is always non-empty: initialized with one segment in new().
-        self.row_groups.last_mut().unwrap().insert_rows(bytes)
+    pub fn insert(&self, bytes: &[u8]) -> Result<()> {
+        let mut row_groups =
+            self.row_groups
+                .write()
+                .map_err(|_| error::Error::TableStoragePoisoned {
+                    table_name: self.name.clone(),
+                })?;
+
+        if let Some(row_group) = row_groups.last_mut() {
+            row_group.insert_rows(bytes)
+        } else {
+            error::TableHasNoRowGroupsSnafu {
+                table_name: self.name.clone(),
+            }
+            .fail()
+        }
     }
 
     pub fn id(&self) -> TableId {
@@ -160,7 +177,14 @@ impl DatabaseTable {
         &self.data_types
     }
 
-    pub fn row_groups(&self) -> &[TableSegment] {
-        &self.row_groups
+    pub fn row_groups_snapshot(&self) -> Result<Vec<TableSegment>> {
+        let row_groups =
+            self.row_groups
+                .read()
+                .map_err(|_| error::Error::TableStoragePoisoned {
+                    table_name: self.name.clone(),
+                })?;
+
+        Ok(row_groups.clone())
     }
 }

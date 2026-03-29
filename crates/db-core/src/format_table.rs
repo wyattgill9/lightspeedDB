@@ -1,3 +1,4 @@
+use crate::error::Result;
 use crate::table::DatabaseTable;
 
 /// Formatted text representation of a table query result.
@@ -13,10 +14,12 @@ impl std::fmt::Display for OutputTable {
 
 impl OutputTable {
     /// Build a formatted ASCII table from all row groups.
-    pub fn from_table(table: &DatabaseTable) -> Self {
+    pub fn from_table(table: &DatabaseTable) -> Result<Self> {
+        let row_groups = table.row_groups_snapshot()?;
+
         // Decode every segment into flat rows (each row = Vec<String>).
         let mut rows: Vec<Vec<String>> = Vec::new();
-        for segment in table.row_groups() {
+        for segment in &row_groups {
             let count = segment.row_count() as usize;
             for row_index in 0..count {
                 let cells: Vec<String> = table
@@ -62,7 +65,7 @@ impl OutputTable {
         output.push_str(&separator);
         output.push('\n');
 
-        OutputTable { output }
+        Ok(OutputTable { output })
     }
 }
 

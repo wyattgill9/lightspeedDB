@@ -23,6 +23,12 @@ pub enum Error {
 
     #[snafu(display("segment full: capacity is {capacity_rows} rows"))]
     SegmentCapacityExceeded { capacity_rows: u32 },
+
+    #[snafu(display("table storage lock poisoned: {table_name}"))]
+    TableStoragePoisoned { table_name: String },
+
+    #[snafu(display("table has no row groups: {table_name}"))]
+    TableHasNoRowGroups { table_name: String },
 }
 
 /// Crate-wide result alias.
