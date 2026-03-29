@@ -3,15 +3,12 @@ use crate::error::{self, Result};
 /// Supported column data types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataTypeKind {
-    U64,
-    U32,
-    U8,
-    I64,
-    I32,
-    I8,
-    F32,
-    F64,
+    U64, U32, U8,
+    I64, I32, I8,
+    F32, F64,
     BOOL,
+
+    STRING // German String
 }
 
 impl DataTypeKind {
@@ -28,6 +25,7 @@ impl DataTypeKind {
             "F32" => DataTypeKind::F32,
             "F64" => DataTypeKind::F64,
             "BOOL" => DataTypeKind::BOOL,
+            "STRING" => DataTypeKind::STRING,
             _ => return error::UnknownDataTypeSnafu { type_name }.fail(),
         };
         Ok(kind)
@@ -39,6 +37,7 @@ impl DataTypeKind {
             DataTypeKind::U64 | DataTypeKind::I64 | DataTypeKind::F64 => 8,
             DataTypeKind::U32 | DataTypeKind::I32 | DataTypeKind::F32 => 4,
             DataTypeKind::U8 | DataTypeKind::I8 | DataTypeKind::BOOL => 1,
+            DataTypeKind::STRING => todo!()
         }
     }
 
@@ -62,6 +61,7 @@ impl DataTypeKind {
                     "false".to_string()
                 }
             }
+            DataTypeKind::STRING => todo!()
         }
     }
 }

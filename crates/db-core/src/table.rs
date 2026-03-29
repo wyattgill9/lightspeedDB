@@ -48,13 +48,13 @@ impl ColumnSegment {
 
 /// A group of column segments forming a horizontal partition of a table.
 #[derive(Debug, Clone)]
-pub struct TableSegment {
+pub struct TablePartition {
     columns: Vec<ColumnSegment>,
     column_byte_widths: Vec<usize>,
     row_count: u32,
 }
 
-impl TableSegment {
+impl TablePartition {
     /// Create a new empty segment with the given column byte widths.
     pub fn new(column_byte_widths: Vec<usize>) -> Self {
         let column_count = column_byte_widths.len();
@@ -119,7 +119,7 @@ pub struct DBTable {
     name: String,
     field_names: Vec<String>,
     data_types: Vec<DataTypeKind>,
-    row_groups: RwLock<Vec<TableSegment>>,
+    row_groups: RwLock<Vec<TablePartition>>,
 }
 
 impl DBTable {
@@ -132,7 +132,7 @@ impl DBTable {
     ) -> Self {
         let column_byte_widths: Vec<usize> =
             data_types.iter().map(|kind| kind.byte_width()).collect();
-        let row_groups = vec![TableSegment::new(column_byte_widths)];
+        let row_groups = vec![TablePartition::new(column_byte_widths)];
         Self {
             id,
             name,
@@ -177,7 +177,7 @@ impl DBTable {
         &self.data_types
     }
 
-    pub fn row_groups_snapshot(&self) -> Result<Vec<TableSegment>> {
+    pub fn row_groups_snapshot(&self) -> Result<Vec<TablePartition>> {
         let row_groups =
             self.row_groups
                 .read()

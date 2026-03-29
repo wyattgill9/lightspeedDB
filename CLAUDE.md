@@ -11,6 +11,8 @@ Style for instructions: terse, phraseal, algebraic, skimmable. Prefer invariants
 - Verify the real workflow end to end; fix root causes, not patches.
 - `1` owner per behavior. `1` canonical path per outcome.
 - After finishing repo changes: always commit and push.
+- Target latest Linux. Prefer `rg`/`fd`, `mv`, `sed -i`, `ast-grep`.
+- Main checkout only; no worktrees. Check the machine before claiming missing prereqs.
 
 ## Safety
 
@@ -61,7 +63,6 @@ Style for instructions: terse, phraseal, algebraic, skimmable. Prefer invariants
 - Simpler returns: `()` > `bool` > `u64` > `Option<u64>` > `Result<u64, E>`.
 - `>5` params → design smell → named structs.
 - No new Rust macros; prefer functions, generics, traits.
-- Config structs for tunables (`#[serde(default)]`). `const` only for spec/universe constants.
 - Repeated literals/paths/flags: one named owner near owning code.
 
 ### Hygiene
@@ -80,14 +81,6 @@ Style for instructions: terse, phraseal, algebraic, skimmable. Prefer invariants
 - Descriptive commit messages.
 - `cargo fmt`. 4-space indent. Hard 100-column limit. Braces on `if` unless single-line.
 - Low-dependency policy. Prefer library entrypoints over shelling out. `main.rs` parses CLI, `lib.rs` owns logic.
-
-## Environment
-
-- Target latest Linux. Prefer `rg`/`fd`, `mv`, `sed -i`, `ast-grep`.
-- Keep `cargo build`/`cargo run` working outside Nix.
-- Absolute binary paths in `Command::new`; `#!/usr/bin/env` in shebangs.
-- Nix: static env in `env`; `export` only for dynamic build-time. `strictDeps = true` unless documented.
-- Main checkout only; no worktrees. Check the machine before claiming missing prereqs.
 
 ## Git
 
