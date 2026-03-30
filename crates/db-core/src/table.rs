@@ -1,32 +1,8 @@
-use std::sync::RwLock;
-
 use crate::dtype::DataTypeKind;
-use crate::error::{self, Result};
 
-/// Maximum rows per segment. Safety bound to prevent unbounded growth.
-const CAPACITY_ROWS_SEGMENT: u32 = 65_536;
+const CAPACITY_ROWS_SEGMENT: u32 = 64 * 2048;
 
-/// Unique identifier for a table within the database.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct TableId(u32);
-
-impl TableId {
-    pub fn new(value: u32) -> Self {
-        Self(value)
-    }
-
-    pub fn value(self) -> u32 {
-        self.0
-    }
-
-    /// Return the next sequential identifier.
-    pub fn next(self) -> Self {
-        Self(self.0 + 1)
-    }
-}
-
-/// A single column's raw byte storage within a segment.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ColumnSegment {
     data: Vec<u8>,
 }
@@ -36,7 +12,6 @@ impl ColumnSegment {
         Self { data: Vec::new() }
     }
 
-    /// Append raw bytes for one or more values in this column.
     fn append_bytes(&mut self, bytes: &[u8]) {
         self.data.extend_from_slice(bytes);
     }
@@ -46,8 +21,7 @@ impl ColumnSegment {
     }
 }
 
-/// A group of column segments forming a horizontal partition of a table.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TablePartition {
     columns: Vec<ColumnSegment>,
     column_byte_widths: Vec<usize>,
@@ -55,10 +29,12 @@ pub struct TablePartition {
 }
 
 impl TablePartition {
-    /// Create a new empty segment with the given column byte widths.
     pub fn new(column_byte_widths: Vec<usize>) -> Self {
         let column_count = column_byte_widths.len();
-        let columns: Vec<ColumnSegment> = (0..column_count).map(|_| ColumnSegment::new()).collect();
+
+        let columns = (0..column_count)
+                .map(|_| ColumnSegment::new()).collect();
+
         Self {
             columns,
             column_byte_widths,
@@ -69,25 +45,22 @@ impl TablePartition {
     /// Insert tightly-packed array-of-structs byte data.
     ///
     /// Each row is `sum(column_byte_widths)` bytes wide.
-    pub fn insert_rows(&mut self, bytes: &[u8]) -> Result<()> {
+    pub fn insert_rows(&mut self, bytes: &[u8]) {
         let size_bytes_row: usize = self.column_byte_widths.iter().sum();
 
         let count_rows_new = if bytes.len().is_multiple_of(size_bytes_row) {
             bytes.len() / size_bytes_row
         } else {
-            return error::InvalidRowBytesSnafu {
-                length_bytes_actual: bytes.len(),
-                size_bytes_row,
-            }
-            .fail();
+            panic!(
+                "row bytes length {} is not a multiple of row size {}",
+                bytes.len(),
+                size_bytes_row
+            );
         };
 
         let count_rows_available = (CAPACITY_ROWS_SEGMENT - self.row_count) as usize;
         if count_rows_new > count_rows_available {
-            return error::SegmentCapacityExceededSnafu {
-                capacity_rows: CAPACITY_ROWS_SEGMENT,
-            }
-            .fail();
+            panic!("segment full: capacity is {} rows", CAPACITY_ROWS_SEGMENT);
         }
 
         for row_index in 0..count_rows_new {
@@ -99,8 +72,6 @@ impl TablePartition {
             }
             self.row_count += 1;
         }
-
-        Ok(())
     }
 
     pub fn columns(&self) -> &[ColumnSegment] {
@@ -112,57 +83,38 @@ impl TablePartition {
     }
 }
 
-/// Core table structure holding schema and row group data.
 #[derive(Debug)]
 pub struct DBTable {
-    id: TableId,
     name: String,
     field_names: Vec<String>,
     data_types: Vec<DataTypeKind>,
-    row_groups: RwLock<Vec<TablePartition>>,
+    row_groups: Vec<TablePartition>,
 }
 
 impl DBTable {
-    /// Create a new table with one empty row group.
     pub fn new(
-        id: TableId,
         name: String,
         field_names: Vec<String>,
         data_types: Vec<DataTypeKind>,
     ) -> Self {
-        let column_byte_widths: Vec<usize> =
-            data_types.iter().map(|kind| kind.byte_width()).collect();
+        let column_byte_widths: Vec<usize> = data_types.iter().map(|kind| kind.byte_width()).collect();
+
         let row_groups = vec![TablePartition::new(column_byte_widths)];
+
         Self {
-            id,
             name,
             field_names,
             data_types,
-            row_groups: RwLock::new(row_groups),
+            row_groups,
         }
     }
 
-    /// Insert tightly-packed row data into the active (last) row group.
-    pub fn insert(&self, bytes: &[u8]) -> Result<()> {
-        let mut row_groups =
-            self.row_groups
-                .write()
-                .map_err(|_| error::Error::TableStoragePoisoned {
-                    table_name: self.name.clone(),
-                })?;
-
-        if let Some(row_group) = row_groups.last_mut() {
-            row_group.insert_rows(bytes)
+    pub fn insert(&mut self, bytes: &[u8]) {
+        if let Some(row_group) = self.row_groups.last_mut() {
+            row_group.insert_rows(bytes);
         } else {
-            error::TableHasNoRowGroupsSnafu {
-                table_name: self.name.clone(),
-            }
-            .fail()
+            panic!("table has no row groups: {}", self.name);
         }
-    }
-
-    pub fn id(&self) -> TableId {
-        self.id
     }
 
     pub fn name(&self) -> &str {
@@ -177,14 +129,7 @@ impl DBTable {
         &self.data_types
     }
 
-    pub fn row_groups_snapshot(&self) -> Result<Vec<TablePartition>> {
-        let row_groups =
-            self.row_groups
-                .read()
-                .map_err(|_| error::Error::TableStoragePoisoned {
-                    table_name: self.name.clone(),
-                })?;
-
-        Ok(row_groups.clone())
+    pub fn row_groups(&self) -> &[TablePartition] {
+        &self.row_groups
     }
 }

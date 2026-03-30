@@ -1,21 +1,14 @@
-use crate::error::{self, Result};
-
-/// Supported column data types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataTypeKind {
     U64, U32, U8,
     I64, I32, I8,
     F32, F64,
     BOOL,
-
-    STRING // German String
 }
 
 impl DataTypeKind {
-    /// Parse a type name string (case-insensitive) into a `DataTypeKind`.
-    pub fn parse(type_name: &str) -> Result<Self> {
-        let upper = type_name.to_uppercase();
-        let kind = match upper.as_str() {
+    pub fn parse(type_name: &str) -> Self {
+        match type_name.to_uppercase().as_str() {
             "U64" => DataTypeKind::U64,
             "U32" => DataTypeKind::U32,
             "U8" => DataTypeKind::U8,
@@ -25,25 +18,18 @@ impl DataTypeKind {
             "F32" => DataTypeKind::F32,
             "F64" => DataTypeKind::F64,
             "BOOL" => DataTypeKind::BOOL,
-            "STRING" => DataTypeKind::STRING,
-            _ => return error::UnknownDataTypeSnafu { type_name }.fail(),
-        };
-        Ok(kind)
+            _ => panic!("unknown data type: {type_name}"),
+        }
     }
 
-    /// Byte width of a single value of this type.
     pub fn byte_width(self) -> usize {
         match self {
             DataTypeKind::U64 | DataTypeKind::I64 | DataTypeKind::F64 => 8,
             DataTypeKind::U32 | DataTypeKind::I32 | DataTypeKind::F32 => 4,
             DataTypeKind::U8 | DataTypeKind::I8 | DataTypeKind::BOOL => 1,
-            DataTypeKind::STRING => todo!()
         }
     }
 
-    /// Format raw little-endian bytes as a human-readable string.
-    ///
-    /// Caller must pass exactly `self.byte_width()` bytes.
     pub fn format_bytes(self, bytes: &[u8]) -> String {
         match self {
             DataTypeKind::U64 => format!("{}", u64::from_le_bytes(bytes.try_into().unwrap())),
@@ -61,7 +47,6 @@ impl DataTypeKind {
                     "false".to_string()
                 }
             }
-            DataTypeKind::STRING => todo!()
         }
     }
 }

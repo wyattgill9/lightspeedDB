@@ -11,8 +11,5 @@ name = "db"
 path = "src/main.rs"
 
 [dependencies]
-snafu     = { workspace = true }
 bytemuck  = { workspace = true }
-ahash     = { workspace = true }
-dashmap   = { workspace = true }
 sqlparser = { workspace = true }

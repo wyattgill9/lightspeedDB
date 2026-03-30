@@ -2,20 +2,9 @@
 
 use bytemuck::{Pod, Zeroable};
 
-use db_core::database::{Database, FieldDef};
-use db_core::error::Error;
+use db_core::database::Database;
 
 fn main() {
-    match run() {
-        Ok(()) => {}
-        Err(error) => {
-            eprintln!("error: {error}");
-            std::process::exit(1);
-        }
-    }
-}
-
-fn run() -> Result<(), Error> {
     #[repr(C)]
     #[derive(Clone, Copy, Zeroable, Pod)]
     struct Vec3 {
@@ -32,18 +21,16 @@ fn run() -> Result<(), Error> {
     ];
     let point_bytes: &[u8] = bytemuck::cast_slice(&points);
 
-    let database = Database::new();
+    let mut database = Database::new();
 
     database.create_table("vec3", &[
-        FieldDef { name: "x", type_name: "f32", },
-        FieldDef { name: "y", type_name: "f32", },
-        FieldDef { name: "z", type_name: "f32", },
-    ])?;
+        ("x", "f32"),
+        ("y", "f32"),
+        ("z", "f32"),
+    ]);
 
-    database.insert("vec3", point_bytes)?;
+    database.insert("vec3", point_bytes);
 
-    let result = database.query_all("vec3")?;
+    let result = database.print_table("vec3");
     println!("{result}");
-
-    Ok(())
 }
