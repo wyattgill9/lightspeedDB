@@ -31,6 +31,6 @@ fn main() {
 
     database.insert("vec3", point_bytes);
 
-    let result = database.print_table("vec3");
+    let result = database.execute_query("SELECT * FROM vec3");
     println!("{result}");
 }

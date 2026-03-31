@@ -1,8 +1,20 @@
 [workspace]
-members          = ["crates/db-core"]
+members = [
+    "crates/db-core",
+    "crates/db-server",
+    "crates/db-sql"
+]
+
 default-members  = ["crates/db-core"]
 resolver         = "2"
 
 [workspace.dependencies]
-bytemuck = { version = "1.25", features = ["derive"] }
+# db-server
+tokio     = { version = "1.50.0", features = ["full"] }
+socket2   = "0.6"
+
+# db-sql
 sqlparser = "0.61.0"
+
+# util
+bytemuck  = { version = "1.25", features = ["derive"] }

@@ -11,5 +11,5 @@ name = "db"
 path = "src/main.rs"
 
 [dependencies]
-bytemuck  = { workspace = true }
-sqlparser = { workspace = true }
+bytemuck     = { workspace = true }
+db_sqlparser = { package = "db-sql", path = "../db-sql" }

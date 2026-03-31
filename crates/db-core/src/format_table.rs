@@ -20,15 +20,16 @@ impl OutputTable {
             let count = segment.row_count() as usize;
             for row_index in 0..count {
                 let cells: Vec<String> = table
-                    .data_types()
+                    .schema()
+                    .columns()
                     .iter()
                     .enumerate()
-                    .map(|(column_index, data_type)| {
-                        let width = data_type.byte_width();
+                    .map(|(column_index, column)| {
+                        let width = column.byte_width();
                         let start = row_index * width;
                         let end = start + width;
                         let column_data = segment.columns()[column_index].data();
-                        data_type.format_bytes(&column_data[start..end])
+                        column.data_type().format_bytes(&column_data[start..end])
                     })
                     .collect();
                 rows.push(cells);
@@ -36,7 +37,12 @@ impl OutputTable {
         }
 
         // Column widths: at least as wide as the header.
-        let headers = table.field_names();
+        let headers: Vec<String> = table
+            .schema()
+            .columns()
+            .iter()
+            .map(|column| column.name().to_owned())
+            .collect();
         let mut column_widths: Vec<usize> = headers.iter().map(|header| header.len()).collect();
         for row in &rows {
             for (index, cell) in row.iter().enumerate() {
@@ -51,7 +57,7 @@ impl OutputTable {
         output.push_str(&format!("Table: {}\n", table.name()));
         output.push_str(&separator);
         output.push('\n');
-        output.push_str(&format_row(headers, &column_widths));
+        output.push_str(&format_row(&headers, &column_widths));
         output.push('\n');
         output.push_str(&separator);
         output.push('\n');

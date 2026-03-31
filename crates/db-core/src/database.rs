@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::dtype::DataTypeKind;
 use crate::format_table::OutputTable;
 use crate::table::DBTable;
+use crate::table_schema::TableSchema;
 
 pub struct Database {
     tables: HashMap<String, DBTable>,
@@ -15,33 +15,27 @@ impl Database {
         }
     }
 
-    pub fn create_table(&mut self, table_name: &str, fields: &[(&str, &str)]) {
+    pub fn create_table_with_schema(&mut self, table_name: &str, schema: TableSchema) {
         if self.tables.contains_key(table_name) {
             panic!("table already exists: {table_name}");
+        } else {
+            let table_name = table_name.to_owned();
+            let table = DBTable::new(table_name.clone(), schema);
+            self.tables.insert(table_name, table);
         }
+    }
 
-        let mut field_names = Vec::with_capacity(fields.len());
-        let mut data_types  = Vec::with_capacity(fields.len());
-
-        for field in fields {
-            field_names.push(field.0.to_owned());
-            data_types.push(DataTypeKind::parse(field.1));
-        }
-
-        let table_name = table_name.to_owned();
-
-        let table = DBTable::new(
-            table_name.clone(),
-            field_names,
-            data_types,
-        );
-
-        self.tables.insert(table_name, table);
+    pub fn create_table(&mut self, table_name: &str, fields: &[(&str, &str)]) {
+        self.create_table_with_schema(table_name, TableSchema::from_fields(fields));
     }
 
     pub fn insert(&mut self, table_name: &str, bytes: &[u8]) {
         let table = self.table_mut(table_name);
         table.insert(bytes)
+    }
+
+    pub fn execute_query(self, query_str: &str) -> String {
+        db_sqlparser::parse(query_str)
     }
 
     pub fn print_table(&self, table_name: &str) -> OutputTable {

@@ -1,4 +1,4 @@
-use crate::dtype::DataTypeKind;
+use crate::table_schema::TableSchema;
 
 const CAPACITY_ROWS_SEGMENT: u32 = 64 * 2048;
 
@@ -24,29 +24,26 @@ impl ColumnSegment {
 #[derive(Debug)]
 pub struct TablePartition {
     columns: Vec<ColumnSegment>,
-    column_byte_widths: Vec<usize>,
     row_count: u32,
 }
 
 impl TablePartition {
-    pub fn new(column_byte_widths: Vec<usize>) -> Self {
-        let column_count = column_byte_widths.len();
-
-        let columns = (0..column_count)
-                .map(|_| ColumnSegment::new()).collect();
+    pub fn new(schema: &TableSchema) -> Self {
+        let columns = (0..schema.column_count())
+            .map(|_| ColumnSegment::new())
+            .collect();
 
         Self {
             columns,
-            column_byte_widths,
             row_count: 0,
         }
     }
 
     /// Insert tightly-packed array-of-structs byte data.
     ///
-    /// Each row is `sum(column_byte_widths)` bytes wide.
-    pub fn insert_rows(&mut self, bytes: &[u8]) {
-        let size_bytes_row: usize = self.column_byte_widths.iter().sum();
+    /// Each row is `schema.row_byte_width()` bytes wide.
+    pub fn insert_rows(&mut self, schema: &TableSchema, bytes: &[u8]) {
+        let size_bytes_row = schema.row_byte_width();
 
         let count_rows_new = if bytes.len().is_multiple_of(size_bytes_row) {
             bytes.len() / size_bytes_row
@@ -65,7 +62,8 @@ impl TablePartition {
 
         for row_index in 0..count_rows_new {
             let mut offset = row_index * size_bytes_row;
-            for (column_index, &width) in self.column_byte_widths.iter().enumerate() {
+            for (column_index, column) in schema.columns().iter().enumerate() {
+                let width = column.byte_width();
                 let end = offset + width;
                 self.columns[column_index].append_bytes(&bytes[offset..end]);
                 offset = end;
@@ -86,32 +84,26 @@ impl TablePartition {
 #[derive(Debug)]
 pub struct DBTable {
     name: String,
-    field_names: Vec<String>,
-    data_types: Vec<DataTypeKind>,
+    schema: TableSchema,
     row_groups: Vec<TablePartition>,
 }
 
 impl DBTable {
-    pub fn new(
-        name: String,
-        field_names: Vec<String>,
-        data_types: Vec<DataTypeKind>,
-    ) -> Self {
-        let column_byte_widths: Vec<usize> = data_types.iter().map(|kind| kind.byte_width()).collect();
-
-        let row_groups = vec![TablePartition::new(column_byte_widths)];
+    pub fn new(name: String, schema: TableSchema) -> Self {
+        let row_groups = vec![TablePartition::new(&schema)];
 
         Self {
             name,
-            field_names,
-            data_types,
+            schema,
             row_groups,
         }
     }
 
     pub fn insert(&mut self, bytes: &[u8]) {
+        let schema = &self.schema;
+
         if let Some(row_group) = self.row_groups.last_mut() {
-            row_group.insert_rows(bytes);
+            row_group.insert_rows(schema, bytes);
         } else {
             panic!("table has no row groups: {}", self.name);
         }
@@ -121,12 +113,8 @@ impl DBTable {
         &self.name
     }
 
-    pub fn field_names(&self) -> &[String] {
-        &self.field_names
-    }
-
-    pub fn data_types(&self) -> &[DataTypeKind] {
-        &self.data_types
+    pub fn schema(&self) -> &TableSchema {
+        &self.schema
     }
 
     pub fn row_groups(&self) -> &[TablePartition] {
