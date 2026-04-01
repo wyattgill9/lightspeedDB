@@ -5,13 +5,13 @@ use crate::table::DBTable;
 use crate::table_schema::TableSchema;
 
 pub struct Database {
-    tables: HashMap<String, DBTable>,
+    tables: HashMap<String, DBTable, rapidhash::fast::RandomState>,
 }
 
 impl Database {
     pub fn new() -> Self {
         Self {
-            tables: HashMap::new(),
+            tables: HashMap::with_hasher(rapidhash::fast::RandomState::default()),
         }
     }
 

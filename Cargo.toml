@@ -18,3 +18,4 @@ sqlparser = "0.61.0"
 
 # util
 bytemuck  = { version = "1.25", features = ["derive"] }
+rapidhash = "4.4.1"

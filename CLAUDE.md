@@ -1,94 +1,45 @@
-AGENTS.md: durable human guidance, code-golfed.
-Style for instructions: terse, phraseal, algebraic, skimmable. Prefer invariants and ownership rules over prose. Keep detail in code/config, not here.
-
-## Core
-
-- `safety > performance > developer_experience`. This order breaks ties.
-- `correctness > compatibility > tiny diffs`.
-- `0` users → textbook-grade code.
-- Zero technical debt. Do it right the first time.
-- Simplicity is the hardest revision, not the first attempt.
-- Verify the real workflow end to end; fix root causes, not patches.
-- `1` owner per behavior. `1` canonical path per outcome.
-- After finishing repo changes: always commit and push.
-- Target latest Linux. Prefer `rg`/`fd`, `mv`, `sed -i`, `ast-grep`.
-- Main checkout only; no worktrees. Check the machine before claiming missing prereqs.
-
-## Safety
-
-- Explicit, simple control flow only. No recursion. Minimal abstractions; each earns its keep.
-- **Limit everything.** All loops, queues: fixed upper bound. Fail-fast on violation.
-- Don't react directly to external events. Batch inbound, process on your schedule, bound work-per-period.
-- Split compound conditions into nested `if/else`. Every `if` gets a matching `else` (handled or asserted).
-- State invariants positively: `if index < length` over negated forms.
-- All errors handled. No exceptions.
-- Hard limit: `<= 70` lines per function. Centralize control flow in parent; pure computation in leaves. Push `if`s up, `for`s down.
-- All compiler warnings at strictest setting.
-- Explicitly pass options at call sites; never rely on library defaults.
-
-### Error Discipline
-
-- Typed errors only; no bare `String`. `snafu` with source context.
-- init/bootstrap/migration/oneshot → fail at first canonical boundary with original typed error.
-- Retries/recovery: explicit-policy only. `1` owner, bounded, observable, idempotence-aware.
-- No silent drops: no `let _ = ...`, `drop(...)`, empty `.is_err()`, hidden retries, silent degradation.
-- No error suppression: no `do -i`, `|| true`, `2>/dev/null`, `| ignore` at boundaries.
-- No silent fallbacks: no `unwrap_or_default()`, sentinels, clamping over fallible conversions.
-- `-> !` for functions that cannot return.
-
-## Performance
-
+- `safety > performance > developer_experience`. `correctness > compatibility > tiny diffs`.
+- Zero users. Zero debt. Do it right.
+- Small atomic commits, conventional messages. Commit and push after each logical change.
+- `git pull --rebase`. Push rejected → rebase deliberately. Never blind `--ours`/`--theirs`.
+- Verify end to end. Fix root causes, not patches.
+- Edition 2024. Nightly features allowed when the win is concrete.
+- `cargo clippy` is the gate — not `check`. Fix warnings; never suppress. `cargo nextest run`. `cargo fmt`.
+- Hard 100-column limit. ≤70 lines per function.
+- `main.rs` parses CLI, `lib.rs` owns logic. No new macros. Low-dependency. Library calls over shelling out.
+- Explicit, simple control flow. No recursion. Each abstraction earns its keep.
+- Limit everything. All loops, queues, retries: fixed upper bound. Fail-fast on violation.
+- Split compound conditions into nested `if/else`. Every `if` gets a matching `else`.
+- Push `if`s up, `for`s down. Centralize control in parent; pure computation in leaves.
+- Batch inbound, process on your schedule, bound work per period. Don't react to external events directly.
+- `snafu` only. `anyhow`/`eyre` banned. Typed errors only — no bare `String`, no `Whatever` returns.
+- Every `?` goes through an explicit context selector naming the operation that failed.
+- Every error variant carries a typed `source`. Never flatten errors into strings.
+- No silent drops, no suppression, no `unwrap_or_default()`, no sentinels.
+- Error enums are per-function or per-module, not god-objects.
+- In loops: `match` + `continue`, accumulate last error, report after exhaustion.
+- Retries: one owner, bounded, observable, idempotence-aware.
+- Tracing: `error = ?e` (Debug). Never `%e` (Display drops the source chain).
 - Design-phase is where 1000× wins live. Back-of-envelope: `{network, disk, memory, CPU} × {bandwidth, latency}`.
-- Optimize slowest first: network → disk → memory → CPU. Compensate for frequency.
+- Optimize slowest first: network → disk → memory → CPU.
 - Amortize via batching. Sequential access, large chunks, no zig-zagging.
-- Control plane vs data plane. Batch at boundary = assertion density without losing throughput.
-- Be explicit. Extract hot loops into standalone functions with primitive args.
-
-## Developer Experience
-
-### Naming
-
-- Get the nouns and verbs just right. Names are the essence.
-- No abbreviations (except `i`/`j` in sort/matrix). `--force` not `-f` in scripts.
-- Units/qualifiers last, descending significance: `latency_ms_max` not `max_latency_ms`.
-- Same char-count for related names: `source`/`target` over `src`/`dest`.
-- Helper prefix: `read_sector()` → `read_sector_callback()`. Callbacks last in params.
-- Order: important things top. `main` first. Structs: fields → types → methods. Else alphabetical.
-- Nouns over participles: `pipeline` over `preparing`.
-
-### Types & Signatures
-
-- Encode invariants in types/constructors/RAII/enums/newtypes/validated structs. Avoid booleans, sentinels, unnamed tuples, magic numbers.
-- Options struct when args mixable. Two same-type args → struct.
-- Simpler returns: `()` > `bool` > `u64` > `Option<u64>` > `Result<u64, E>`.
-- `>5` params → design smell → named structs.
-- No new Rust macros; prefer functions, generics, traits.
-- Repeated literals/paths/flags: one named owner near owning code.
-
-### Hygiene
-
-- No variable duplication or aliasing. Calculate/check close to use.
-- Smallest possible scope. Minimize variables in play.
-- Functions run to completion; no suspend.
-- Guard against buffer bleeds: unzeroed padding leaks data.
-- `index` (0-based) + 1 = `count` (1-based). `count × unit = size`. Include units in names.
-- Small, composable crates/modules. Split by boundary, not convenience. No god crates.
-
-### Comments & Style
-
-- Always say **why**. Comments are sentences: space after `//`, capital, full stop.
-- Self-documenting code first. Comments for contracts, invariants, non-obvious why.
-- Descriptive commit messages.
-- `cargo fmt`. 4-space indent. Hard 100-column limit. Braces on `if` unless single-line.
-- Low-dependency policy. Prefer library entrypoints over shelling out. `main.rs` parses CLI, `lib.rs` owns logic.
-
-## Git
-
-- `git pull --rebase`. No `git stash`.
-- Commits: small, atomic, direct, conventional. End each logical change with commit+push.
-- Push rejected → rebase deliberately. Never blind `--ours`/`--theirs`.
-
-## Conflicts And Overrides
-
-- Request conflicts with this file → stop, name conflict, recommend repo-consistent path, wait for confirmation.
-- Repo-wide: `snafu` for typed errors; `cargo clippy` lint gate; `cargo nextest run` test gate; normal `use` imports fine.
+- Minimize allocations. `&str` over `String`, `Cow` over cloning, stack over heap for bounded data.
+- Zero-copy by default. `bytes::Bytes` across async boundaries. No `format!/print!` in hot paths.
+- `papaya` > `dashmap` > locked `HashMap`. Never `RwLock<HashMap>`. `rapidhash` for hot paths.
+- `rustix` over raw `libc`. `socket2` for socket config.
+- Get the nouns and verbs right. Names are the essence. No abbreviations.
+- Units/qualifiers last, descending significance: `latency_ms_max`.
+- Same char-count for related names: `source`/`target` not `src`/`dest`.
+- `index` (0-based) + 1 = `count` (1-based). `count × unit = size`. Units in names.
+- Important things first. `main` first. Else alphabetical.
+- Encode invariants in types. No booleans where enums belong, no sentinels, no magic numbers.
+- No unnamed tuples. Named structs, even for pairs.
+- No bare `as` casts. `try_from`/`try_into` with error propagation.
+- Wrap identity keys in newtypes: `NodeId(Uuid)` not `NodeId(String)`.
+- Options struct when args are mixable. >5 params → design smell.
+- Visibility: `pub`, `pub(crate)`, private. Imports use `crate::`, never `super::`.
+- `rkyv` internal. Serde at external boundaries only.
+- Small crates split by boundary, not convenience. Smallest possible scope.
+- No variable duplication. Calculate close to use.
+- Say **why**. Self-documenting code first. Comments for contracts, invariants, non-obvious reasoning.
+- Request conflicts with this file → stop, name the conflict, recommend the repo-consistent path, wait.
