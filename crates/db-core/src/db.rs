@@ -1,11 +1,17 @@
 use std::collections::HashMap;
 
-use crate::format_table::OutputTable;
 use crate::table::DBTable;
 use crate::table_schema::TableSchema;
+use crate::table_format::OutputTable;
 
 pub struct Database {
     tables: HashMap<String, DBTable, rapidhash::fast::RandomState>,
+}
+
+impl Default for Database {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Database {

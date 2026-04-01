@@ -2,7 +2,7 @@
 
 use bytemuck::{Pod, Zeroable};
 
-use db_core::database::Database;
+use db_core::db::Database;
 
 fn main() {
     #[repr(C)]
@@ -21,16 +21,16 @@ fn main() {
     ];
     let point_bytes: &[u8] = bytemuck::cast_slice(&points);
 
-    let mut database = Database::new();
+    let mut db = Database::new();
 
-    database.create_table("vec3", &[
+    db.create_table("vec3", &[
         ("x", "f32"),
         ("y", "f32"),
         ("z", "f32"),
     ]);
 
-    database.insert("vec3", point_bytes);
+    db.insert("vec3", point_bytes);
 
-    let result = database.execute_query("SELECT * FROM vec3");
+    let result = db.print_table("vec3"); // db.execute_query("SELECT * FROM vec3");
     println!("{result}");
 }
