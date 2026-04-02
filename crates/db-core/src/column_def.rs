@@ -16,7 +16,7 @@ impl ColumnDef {
             Self {
                 data_type,
                 width: data_type.byte_width() as u32, // @Truncation
-                name
+                name,
             }
         }
     }

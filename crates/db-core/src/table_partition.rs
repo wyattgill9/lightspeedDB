@@ -10,9 +10,7 @@ pub struct TablePartition {
 
 impl TablePartition {
     pub fn new(schema: &TableSchema) -> Self {
-        let columns = (0..schema.column_count())
-            .map(ColumnSegment::new)
-            .collect();
+        let columns = (0..schema.column_count()).map(ColumnSegment::new).collect();
 
         Self {
             columns,
@@ -22,34 +20,28 @@ impl TablePartition {
 
     /// Insert tightly-packed array-of-structs byte data.
     ///
-    /// Each row is `schema.row_byte_width()` bytes wide.
+    /// Caller must pre-validate: `bytes.len()` is a multiple of `schema.row_byte_width()`,
+    /// and the row count does not exceed `rows_available()`.
     pub fn insert_rows(&mut self, schema: &TableSchema, bytes: &[u8]) {
-        let size_bytes_row = schema.row_byte_width();
+        let row_byte_width = schema.row_byte_width();
+        let row_count = bytes.len() / row_byte_width;
 
-        let count_rows_new = if bytes.len().is_multiple_of(size_bytes_row) {
-            bytes.len() / size_bytes_row
-        } else {
+        if row_count > self.rows_available() as usize {
             panic!(
-                "row bytes length {} is not a multiple of row size {}",
-                bytes.len(),
-                size_bytes_row
+                "row group overflow: {} rows requested, {} available",
+                row_count,
+                self.rows_available()
             );
-        };
-
-        let count_rows_available = (CAPACITY_ROWS_SEGMENT - self.row_count) as usize;
-        if count_rows_new > count_rows_available {
-            panic!("segment full: capacity is {} rows", CAPACITY_ROWS_SEGMENT);
-        }
-
-        for row_index in 0..count_rows_new {
-            let mut offset = row_index * size_bytes_row;
-            for (column_index, column) in schema.columns().iter().enumerate() {
-                let width = column.byte_width();
-                let end = offset + width;
-                self.columns[column_index].append_bytes(&bytes[offset..end]);
-                offset = end;
+        } else {
+            for row_bytes in bytes.chunks_exact(row_byte_width) {
+                let mut byte_offset = 0usize;
+                for (column_index, column) in schema.columns().iter().enumerate() {
+                    let byte_end = byte_offset + column.byte_width();
+                    self.columns[column_index].append_bytes(&row_bytes[byte_offset..byte_end]);
+                    byte_offset = byte_end;
+                }
+                self.row_count += 1;
             }
-            self.row_count += 1;
         }
     }
 
@@ -60,5 +52,8 @@ impl TablePartition {
     pub fn row_count(&self) -> u32 {
         self.row_count
     }
-}
 
+    pub fn rows_available(&self) -> u32 {
+        CAPACITY_ROWS_SEGMENT - self.row_count
+    }
+}

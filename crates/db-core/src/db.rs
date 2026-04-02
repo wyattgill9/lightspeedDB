@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::table::DBTable;
-use crate::table_schema::TableSchema;
 use crate::table_format::OutputTable;
+use crate::table_schema::TableSchema;
 
 pub struct Database {
     tables: HashMap<String, DBTable, rapidhash::fast::RandomState>,
@@ -26,7 +26,9 @@ impl Database {
             panic!("table already exists: {table_name}");
         } else {
             let table_name = table_name.to_owned();
-            let table = DBTable::new(table_name.clone(), schema);
+            let id = u32::try_from(self.tables.len())
+                .unwrap_or_else(|_| panic!("table count exceeds u32::MAX"));
+            let table = DBTable::new(table_name.clone(), id, schema);
             self.tables.insert(table_name, table);
         }
     }

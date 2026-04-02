@@ -1,3 +1,4 @@
+#[rustfmt::skip]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataTypeKind {
     U64, U32, U8,
@@ -42,9 +43,9 @@ impl DataTypeKind {
             DataTypeKind::F64 => format!("{:.6}", f64::from_le_bytes(bytes.try_into().unwrap())),
             DataTypeKind::BOOL => {
                 if bytes[0] != 0 {
-                    "true".to_string()
+                    "true".to_owned()
                 } else {
-                    "false".to_string()
+                    "false".to_owned()
                 }
             }
         }

@@ -48,7 +48,6 @@ impl TableSchema {
     }
 }
 
-
 impl std::ops::Index<usize> for TableSchema {
     type Output = ColumnDef;
 
