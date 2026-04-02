@@ -24,7 +24,7 @@ impl DBTable {
     }
 
     pub fn insert(&mut self, bytes: &[u8]) {
-        let row_byte_width = self.schema.row_byte_width();
+        let row_byte_width = self.schema.row_size_bytes();
 
         if !bytes.len().is_multiple_of(row_byte_width) {
             panic!(

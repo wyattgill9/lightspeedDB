@@ -23,7 +23,7 @@ impl TablePartition {
     /// Caller must pre-validate: `bytes.len()` is a multiple of `schema.row_byte_width()`,
     /// and the row count does not exceed `rows_available()`.
     pub fn insert_rows(&mut self, schema: &TableSchema, bytes: &[u8]) {
-        let row_byte_width = schema.row_byte_width();
+        let row_byte_width = schema.row_size_bytes();
         let row_count = bytes.len() / row_byte_width;
 
         if row_count > self.rows_available() as usize {

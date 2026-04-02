@@ -20,7 +20,7 @@ impl ColumnSegment {
     }
 
     pub fn def<'s>(&self, schema: &'s TableSchema) -> &'s ColumnDef {
-        &schema[self.column_def_index]
+        schema.column_at(self.column_def_index)
     }
 
     pub fn data(&self) -> &[u8] {

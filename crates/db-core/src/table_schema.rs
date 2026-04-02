@@ -3,7 +3,7 @@ use crate::column_def::ColumnDef;
 #[derive(Debug, PartialEq, Eq)]
 pub struct TableSchema {
     columns: Vec<ColumnDef>,
-    row_width_bytes: usize,
+    row_size_bytes: usize,
 }
 
 impl TableSchema {
@@ -11,17 +11,17 @@ impl TableSchema {
         if columns.is_empty() {
             panic!("table schema must contain at least one column");
         } else {
-            let mut row_byte_width = 0usize;
+            let mut row_size_bytes = 0usize;
 
             for column in &columns {
-                row_byte_width = row_byte_width
+                row_size_bytes = row_size_bytes
                     .checked_add(column.byte_width())
                     .unwrap_or_else(|| panic!("schema row width overflowed"));
             }
 
             Self {
                 columns,
-                row_width_bytes: row_byte_width,
+                row_size_bytes,
             }
         }
     }
@@ -43,15 +43,11 @@ impl TableSchema {
         &self.columns
     }
 
-    pub fn row_byte_width(&self) -> usize {
-        self.row_width_bytes
+    pub fn row_size_bytes(&self) -> usize {
+        self.row_size_bytes
     }
-}
 
-impl std::ops::Index<usize> for TableSchema {
-    type Output = ColumnDef;
-
-    fn index(&self, index: usize) -> &Self::Output {
+    pub fn column_at(&self, index: usize) -> &ColumnDef {
         &self.columns[index]
     }
 }
