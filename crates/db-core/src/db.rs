@@ -46,15 +46,14 @@ impl Database {
         db_sqlparser::parse(query_str)
     }
 
-    pub fn print_table(&self, table_name: &str) -> OutputTable {
-        let table = self.table(table_name);
-        OutputTable::from_table(table)
-    }
+    pub fn print_table(&mut self, table_name: &str) -> OutputTable {
+        let table =
+            self.tables
+            .get_mut(table_name)
+            .unwrap_or_else(|| panic!("table not found: {table_name}"));
 
-    fn table(&self, table_name: &str) -> &DBTable {
-        self.tables
-            .get(table_name)
-            .unwrap_or_else(|| panic!("table not found: {table_name}"))
+        table.flush();
+        OutputTable::from_table(table)
     }
 
     fn table_mut(&mut self, table_name: &str) -> &mut DBTable {

@@ -33,15 +33,21 @@ impl TablePartition {
                 self.rows_available()
             );
         } else {
-            for row_bytes in bytes.chunks_exact(row_byte_width) {
-                let mut byte_offset = 0usize;
-                for (column_index, column) in schema.columns().iter().enumerate() {
-                    let byte_end = byte_offset + column.byte_width();
-                    self.columns[column_index].append_bytes(&row_bytes[byte_offset..byte_end]);
-                    byte_offset = byte_end;
+            // Column-major transposition: iterate columns outer, rows inner.
+            // Each column buffer stays hot in cache for its entire fill,
+            // rather than alternating between all N buffers per row.
+            let mut col_byte_start = 0usize;
+            for (col_index, col_def) in schema.columns().iter().enumerate() {
+                let col_byte_width = col_def.byte_width();
+                let col_byte_end = col_byte_start + col_byte_width;
+                let col = &mut self.columns[col_index];
+                col.reserve(row_count * col_byte_width);
+                for row_bytes in bytes.chunks_exact(row_byte_width) {
+                    col.append_bytes(&row_bytes[col_byte_start..col_byte_end]);
                 }
-                self.row_count += 1;
+                col_byte_start = col_byte_end;
             }
+            self.row_count += u32::try_from(row_count).expect("row count fits u32");
         }
     }
 

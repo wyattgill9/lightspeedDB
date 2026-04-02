@@ -47,10 +47,19 @@ fn bench_insert(c: &mut Criterion) {
         b.iter_batched(
             fresh_table,
             |mut table| {
-                // table.insert(bytemuck::cast_slice(&points));
                 for point in &points {
                     table.insert(bytemuck::bytes_of(point));
                 }
+            },
+            BatchSize::LargeInput,
+        );
+    });
+
+    group.bench_function("vec3_bulk", |b| {
+        b.iter_batched(
+            fresh_table,
+            |mut table| {
+                table.insert(bytemuck::cast_slice(&points));
             },
             BatchSize::LargeInput,
         );

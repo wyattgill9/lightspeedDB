@@ -15,6 +15,10 @@ impl ColumnSegment {
         }
     }
 
+    pub fn reserve(&mut self, additional: usize) {
+        self.data.reserve(additional);
+    }
+
     pub fn append_bytes(&mut self, bytes: &[u8]) {
         self.data.extend_from_slice(bytes);
     }
