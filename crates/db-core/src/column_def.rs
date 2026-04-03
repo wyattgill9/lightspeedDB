@@ -2,7 +2,7 @@ use crate::dtype::DataTypeKind;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ColumnDef {
-    data_type: DataTypeKind,
+    dtype: DataTypeKind,
     width: u32,
     name: String,
 }
@@ -14,7 +14,7 @@ impl ColumnDef {
             panic!("column name cannot be empty");
         } else {
             Self {
-                data_type,
+                dtype: data_type,
                 width: data_type.byte_width() as u32, // @Truncation
                 name,
             }
@@ -26,11 +26,11 @@ impl ColumnDef {
     }
 
     pub fn byte_width(&self) -> usize {
-        self.data_type.byte_width()
+        self.dtype.byte_width()
     }
 
     pub fn data_type(&self) -> DataTypeKind {
-        self.data_type
+        self.dtype
     }
 
     pub fn name(&self) -> &str {

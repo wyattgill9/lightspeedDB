@@ -1,14 +1,16 @@
+use fastbloom::BloomFilter;
 use cardinality_estimator::CardinalityEstimator;
 
-use crate::table_schema::TableSchema;
 use crate::column_def::ColumnDef;
+use crate::table_schema::TableSchema;
 use crate::zone_map::ZoneMap;
 
 #[derive(Debug)]
 pub struct ColumnSegment {
     data: Vec<u8>,
     column_def_index: usize,
-    _zone_map: ZoneMap,
+    zone_map: ZoneMap,
+    bloom: Option<BloomFilter<rapidhash::quality::RandomState>>,
     hll: CardinalityEstimator<[u8], rapidhash::quality::RapidHasher<'static>>, // HyperLogLog++
 }
 
@@ -17,8 +19,9 @@ impl ColumnSegment {
         Self {
             data: Vec::new(),
             column_def_index: column_index,
-            _zone_map: ZoneMap::new(),
-            hll : CardinalityEstimator::new()
+            zone_map: ZoneMap::new(),
+            bloom: Some(BloomFilter::with_num_bits(64).hasher(rapidhash::quality::RandomState::default()).hashes(1)),
+            hll: CardinalityEstimator::new(),
         }
     }
 
@@ -26,9 +29,12 @@ impl ColumnSegment {
         self.data.reserve(additional);
     }
 
-
-    pub fn push_dtype_val(&mut self, bytes: &[u8]) {
+    pub fn push_dtype_val(&mut self, bytes: &[u8], schema: &TableSchema) {
+        if let Some(bloom_filter) = &mut self.bloom {
+            bloom_filter.insert(bytes);
+        }
         self.hll.insert(bytes);
+        self.zone_map.update(bytes, self.def(schema).data_type());
         self.data.extend_from_slice(bytes);
     }
 

@@ -1,15 +1,16 @@
 use crate::table_meta::TableMeta;
+use crate::table_partition::TablePartition;
 use crate::table_schema::TableSchema;
-use crate::table_partition::TableSegment;
 use crate::table_stats::TableStatistics;
 
-const CAPACITY_ROWS_WRITE_BUFFER: usize = 4096; /// Rows accumulate here before being flushed to a partition.
+const CAPACITY_ROWS_WRITE_BUFFER: usize = 4096;
+/// Rows accumulate here before being flushed to a partition.
 
 #[derive(Debug)]
 pub struct DBTable {
     meta: TableMeta,
     schema: TableSchema,
-    row_groups: Vec<TableSegment>, // will become `row_groups: ArcSwap<Vec<Arc<RowGroup>>>,`
+    row_groups: Vec<TablePartition>, // will become `row_groups: ArcSwap<Vec<Arc<RowGroup>>>,`
     stats: TableStatistics,
 
     write_buffer: Vec<u8>,
@@ -17,7 +18,7 @@ pub struct DBTable {
 
 impl DBTable {
     pub fn new(name: String, id: u32, schema: TableSchema) -> Self {
-        let row_groups = vec![TableSegment::new(&schema)];
+        let row_groups = vec![TablePartition::new(&schema)];
         let buffer_capacity_bytes = CAPACITY_ROWS_WRITE_BUFFER * schema.row_size_bytes();
 
         Self {
@@ -57,12 +58,12 @@ impl DBTable {
         // while holding the byte slice. Swap back afterward to reuse the allocation.
         let mut buffer = Vec::new();
         std::mem::swap(&mut self.write_buffer, &mut buffer);
-        self.write_rows_to_partitions(&buffer);
+        self.write_rows_to_segments(&buffer);
         buffer.clear();
         std::mem::swap(&mut self.write_buffer, &mut buffer);
     }
 
-    fn write_rows_to_partitions(&mut self, bytes: &[u8]) {
+    fn write_rows_to_segments(&mut self, bytes: &[u8]) {
         let row_byte_width = self.schema.row_size_bytes();
         let row_count_total = bytes.len() / row_byte_width;
         let mut row_count_done = 0usize;
@@ -74,7 +75,7 @@ impl DBTable {
                 .is_none_or(|rg| rg.rows_available() == 0);
 
             if is_full {
-                self.row_groups.push(TableSegment::new(&self.schema));
+                self.row_groups.push(TablePartition::new(&self.schema));
             } else {
                 // current row group has capacity; no action needed
             }
@@ -103,7 +104,7 @@ impl DBTable {
         &self.schema
     }
 
-    pub fn row_groups(&self) -> &[TableSegment] {
+    pub fn row_groups(&self) -> &[TablePartition] {
         &self.row_groups
     }
 

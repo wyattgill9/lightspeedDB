@@ -3,12 +3,12 @@ use crate::{column_segment::ColumnSegment, table_schema::TableSchema};
 const CAPACITY_ROWS_SEGMENT: u32 = 64 * 2048;
 
 #[derive(Debug)]
-pub struct TableSegment {
+pub struct TablePartition {
     columns: Vec<ColumnSegment>,
     row_count: u32,
 }
 
-impl TableSegment {
+impl TablePartition {
     pub fn new(schema: &TableSchema) -> Self {
         let columns = (0..schema.column_count()).map(ColumnSegment::new).collect();
 
@@ -43,7 +43,7 @@ impl TableSegment {
                 let col = &mut self.columns[col_index];
                 col.reserve(row_count * col_byte_width);
                 for row_bytes in bytes.chunks_exact(row_byte_width) {
-                    col.push_dtype_val(&row_bytes[col_byte_start..col_byte_end]);
+                    col.push_dtype_val(&row_bytes[col_byte_start..col_byte_end], schema);
                 }
                 col_byte_start = col_byte_end;
             }

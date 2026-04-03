@@ -11,6 +11,7 @@ resolver         = "2"
 [workspace.dependencies]
 # db-core
 cardinality-estimator = "1" # HyperLogLog
+fastbloom = "0.17.0"        # Bloom Filter
 
 # db-server
 tokio     = { version = "1.50.0", features = ["full"] }

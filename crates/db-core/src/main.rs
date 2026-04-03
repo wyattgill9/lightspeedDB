@@ -4,6 +4,7 @@ use bytemuck::{Pod, Zeroable};
 
 use db_core::db::Database;
 
+#[cfg(target_pointer_width = "64")]
 fn main() {
     #[repr(C)]
     #[derive(Clone, Copy, Zeroable, Pod)]
@@ -33,4 +34,9 @@ fn main() {
 
     let result = db.print_table("vec3"); // db.execute_query("SELECT * FROM vec3");
     println!("{result}");
+}
+
+#[cfg(not(target_pointer_width = "64"))]
+fn main() {
+    println!("This program requires a 64-bit target.");
 }
