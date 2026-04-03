@@ -47,12 +47,12 @@ impl Database {
     }
 
     pub fn print_table(&mut self, table_name: &str) -> OutputTable {
-        let table =
-            self.tables
+        let table = self
+            .tables
             .get_mut(table_name)
             .unwrap_or_else(|| panic!("table not found: {table_name}"));
 
-        table.flush();
+        table.flush_write_buffer();
         OutputTable::from_table(table)
     }
 

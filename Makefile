@@ -1,3 +1,5 @@
+.PHONY: build run bench check test fmt
+
 build:
 	cargo build
 

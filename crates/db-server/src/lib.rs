@@ -1,5 +1,6 @@
-use socket2::{Domain, Protocol, Socket, Type};
 use std::net::SocketAddr;
+
+use socket2::{Domain, Protocol, Socket, Type};
 use tokio::net::TcpListener;
 
 #[tokio::main]

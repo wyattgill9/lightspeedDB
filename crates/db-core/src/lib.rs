@@ -10,4 +10,6 @@ pub mod dtype;
 pub mod table_schema;
 // pub mod stringt;
 
+pub mod zone_map;
+
 pub mod table_format;
