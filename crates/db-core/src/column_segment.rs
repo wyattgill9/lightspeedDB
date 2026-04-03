@@ -1,5 +1,5 @@
-use fastbloom::BloomFilter;
 use cardinality_estimator::CardinalityEstimator;
+use fastbloom::BloomFilter;
 
 use crate::column_def::ColumnDef;
 use crate::table_schema::TableSchema;
@@ -20,7 +20,11 @@ impl ColumnSegment {
             data: Vec::new(),
             column_def_index: column_index,
             zone_map: ZoneMap::new(),
-            bloom: Some(BloomFilter::with_num_bits(64).hasher(rapidhash::quality::RandomState::default()).hashes(1)),
+            bloom: Some(
+                BloomFilter::with_num_bits(64)
+                    .hasher(rapidhash::quality::RandomState::default())
+                    .hashes(1),
+            ),
             hll: CardinalityEstimator::new(),
         }
     }

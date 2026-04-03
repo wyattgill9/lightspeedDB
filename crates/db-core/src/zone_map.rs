@@ -35,21 +35,21 @@ impl ZoneMap {
 
     pub fn update(&mut self, bytes: &[u8], dtype: DataTypeKind) {
         match dtype {
-            DataTypeKind::U64  => self.compare_bytes::<u64>(&bytes[0..8]),
-            DataTypeKind::U32  => self.compare_bytes::<u32>(&bytes[0..4]),
-            DataTypeKind::U8   => self.compare_bytes::<u8>(&bytes[0..1]),
-            DataTypeKind::I64  => self.compare_bytes::<i64>(&bytes[0..8]),
-            DataTypeKind::I32  => self.compare_bytes::<i32>(&bytes[0..4]),
-            DataTypeKind::I8   => self.compare_bytes::<i8>(&bytes[0..1]),
-            DataTypeKind::F64  => self.compare_bytes::<f64>(&bytes[0..8]),
-            DataTypeKind::F32  => self.compare_bytes::<f32>(&bytes[0..4]),
+            DataTypeKind::U64 => self.compare_bytes::<u64>(&bytes[0..8]),
+            DataTypeKind::U32 => self.compare_bytes::<u32>(&bytes[0..4]),
+            DataTypeKind::U8 => self.compare_bytes::<u8>(&bytes[0..1]),
+            DataTypeKind::I64 => self.compare_bytes::<i64>(&bytes[0..8]),
+            DataTypeKind::I32 => self.compare_bytes::<i32>(&bytes[0..4]),
+            DataTypeKind::I8 => self.compare_bytes::<i8>(&bytes[0..1]),
+            DataTypeKind::F64 => self.compare_bytes::<f64>(&bytes[0..8]),
+            DataTypeKind::F32 => self.compare_bytes::<f32>(&bytes[0..4]),
             DataTypeKind::BOOL => self.compare_bytes::<u8>(&bytes[0..1]),
         }
     }
 
     fn compare_bytes<T: AnyBitPattern + PartialOrd + NoUninit>(&mut self, bytes: &[u8]) {
         let size = size_of::<T>();
-        let new    : T = bytemuck::pod_read_unaligned(bytes);
+        let new: T = bytemuck::pod_read_unaligned(bytes);
         let cur_min: T = bytemuck::pod_read_unaligned(&self.min_bytes[..size]);
         let cur_max: T = bytemuck::pod_read_unaligned(&self.max_bytes[..size]);
 
