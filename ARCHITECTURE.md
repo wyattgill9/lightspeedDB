@@ -27,13 +27,13 @@ per-column byte vectors inside immutable row groups.
 
 ```
 Database
- └─ tables: HashMap<String, DBTable>      (rapidhash)
+ └─ tables: HashMap<String, DBTable>      (rapidhash::fast)
      └─ DBTable
          ├─ write_buffer: Vec<u8>          row-major staging area
-         ├─ row_groups: Vec<TableSegment>  column-major row groups
+         ├─ row_groups: Vec<TablePartition> column-major partitions
          ├─ schema: TableSchema
-         ├─ meta: TableMeta               name + id
-         └─ stats: TableStatistics        (placeholder)
+         ├─ meta: TableMeta                name + id
+         └─ stats: TableStatistics         (placeholder)
 ```
 
 ### Write Path
@@ -43,18 +43,18 @@ Database
 2. When the buffer reaches **4 096 rows**, it auto-flushes.
 3. `flush_write_buffer()` swaps the buffer out (to avoid aliasing),
    then calls `write_rows_to_segments`.
-4. Rows are split across segments. If the active segment is full, a
-   new one is allocated.
+4. Rows are split across partitions. If the active partition is full,
+   a new one is allocated.
 
-### TableSegment (Row Group)
+### TablePartition (Row Group)
 
-Each segment holds up to **131 072 rows** (64 x 2 048). It contains
-one `ColumnSegment` per schema column. The segment tracks its own
+Each partition holds up to **131 072 rows** (64 × 2 048). It contains
+one `ColumnSegment` per schema column. The partition tracks its own
 `row_count` and derives `rows_available` from the fixed capacity.
 
 ### Column-Major Transposition
 
-`TableSegment::insert_rows` iterates **columns outer, rows inner**.
+`TablePartition::insert_rows` iterates **columns outer, rows inner**.
 For each column, it walks every row and copies that column's bytes
 into the column segment. This keeps each column buffer hot in L1/L2
 cache during its entire fill rather than alternating between N buffers
@@ -73,20 +73,23 @@ for column in schema.columns():
 pub struct ColumnSegment {
     data: Vec<u8>,                   // dense column bytes
     column_def_index: usize,         // position in schema
-    _zone_map: ZoneMap,               // min/max index (placeholder)
-    bloom: Option<BloomFilter>,      // membership filter (placeholder)
-    hll: CardinalityEstimator,       // HyperLogLog++ per column
+    zone_map: ZoneMap,               // per-segment min/max index
+    bloom: Option<BloomFilter<...>>, // membership filter
+    hll: CardinalityEstimator<...>,  // HyperLogLog++ per column
 }
 ```
 
-Every value pushed into a column is also fed to the HyperLogLog++
-estimator, providing O(1) approximate distinct-count per column per
-segment without a separate pass.
+Every value pushed into a column feeds all three structures:
 
-`BloomFilter` is a placeholder struct allocated alongside each column
-segment. It will support point-lookup membership tests (e.g. skip a
-segment entirely when a filter predicate value is provably absent),
-complementing ZoneMap range pruning.
+- **ZoneMap** — type-aware min/max comparison via `bytemuck` zero-copy
+  cast; supports range-based segment pruning.
+- **BloomFilter** — membership filter backed by `fastbloom`; supports
+  point-lookup segment pruning (skip segments where a value is
+  provably absent).
+- **HyperLogLog++** — O(1) approximate distinct-count per column per
+  segment without a separate pass.
+
+Both ZoneMap and BloomFilter use `rapidhash::quality` for hashing.
 
 ## Type System
 
@@ -108,7 +111,7 @@ into a display string for output.
 strings:
 
 - **StringRef**: 16-byte aligned. 4-byte length + 12-byte payload.
-  Strings <= 12 bytes are inlined; longer strings store a 4-byte
+  Strings ≤ 12 bytes are inlined; longer strings store a 4-byte
   prefix plus an arena index and offset.
 - **StringBuffer**: Per-segment arena backed by a linked list of
   1 MB `ArenaBuffer` blocks.
@@ -136,10 +139,6 @@ input buffers.
   `tables.len()`).
 - **TableStatistics**: empty struct, reserved for future counters
   (row count, byte count, segment count).
-- **ZoneMap**: empty struct on each `ColumnSegment`, reserved for
-  per-segment min/max tracking and predicate pushdown.
-- **BloomFilter**: empty struct on each `ColumnSegment` (wrapped in
-  `Option`), reserved for membership-based segment pruning.
 
 ## Platform Requirements
 
@@ -156,7 +155,7 @@ Currently minimal:
   AST and returns the debug representation.
 - **Database::execute_query** calls the parser but does not evaluate.
 - **Database::print_table** performs a full scan: flush the write
-  buffer, iterate all segments, reconstruct rows from columnar data,
+  buffer, iterate all partitions, reconstruct rows from columnar data,
   and render an ASCII table via `OutputTable`.
 
 No execution operators, predicate evaluation, or aggregation exist
@@ -190,8 +189,9 @@ atomically while a single writer appends new segments.
 | Crate | Purpose |
 |-------|---------|
 | bytemuck 1.25 | Zero-copy cast between `#[repr(C)]` structs and `&[u8]` |
-| rapidhash 4.4 | Fast hashing for `HashMap` and HLL estimator |
+| rapidhash 4.4 | Fast hashing for `HashMap`, ZoneMap, and BloomFilter |
 | cardinality-estimator 1.0 | HyperLogLog++ distinct-count per column |
+| fastbloom 0.17 | Bloom filter for membership-based segment pruning |
 | sqlparser 0.61 | SQL parsing (AST only) |
 | tokio 1.50 | Async runtime for future server |
 | socket2 0.6 | Low-level socket configuration |
@@ -216,7 +216,7 @@ Drawn from `CLAUDE.md`:
 - **Correctness > compatibility.**
 - Column-major layout for cache-friendly scans.
 - Zero-copy by default (`bytemuck::cast_slice`, `&[u8]` slices).
-- Bound everything: write buffer capped at 4 096 rows, segments at
+- Bound everything: write buffer capped at 4 096 rows, partitions at
   131 072 rows, table count validated against `u32::MAX`.
 - Fixed-width types only (no variable-length allocation on the hot
   path today).
@@ -235,7 +235,7 @@ Drawn from `CLAUDE.md`:
                             │ flush (auto at capacity or explicit)
                             ▼
                 ┌───────────────────────┐
-                │  write_rows_to_       │  split across segments,
+                │  write_rows_to_       │  split across partitions,
                 │  segments()           │  allocate new if full
                 └───────────┬───────────┘
                             │
@@ -244,8 +244,9 @@ Drawn from `CLAUDE.md`:
         ┌──────────┐  ┌──────────┐  ┌──────────┐
         │ ColSeg 0 │  │ ColSeg 1 │  │ ColSeg N │   column-major
         │ data[]   │  │ data[]   │  │ data[]   │   dense bytes
-        │ hll      │  │ hll      │  │ hll      │   + HLL estimator
-        │ bloom    │  │ bloom    │  │ bloom    │   + membership filter
+        │ zone_map │  │ zone_map │  │ zone_map │   min/max per segment
+        │ bloom    │  │ bloom    │  │ bloom    │   membership filter
+        │ hll      │  │ hll      │  │ hll      │   HLL++ estimator
         └──────────┘  └──────────┘  └──────────┘
 ```
 
@@ -256,15 +257,15 @@ crates/db-core/src/
   main.rs              CLI entry point, example usage (64-bit only)
   lib.rs               Module declarations
   db.rs                Database: table map, insert, query, print
-  table.rs             DBTable: write buffer, flush, segment management
-  table_partition.rs   TableSegment: column-major transposition
-  column_segment.rs    ColumnSegment: dense bytes + HLL
+  table.rs             DBTable: write buffer, flush, partition management
+  table_partition.rs   TablePartition: column-major transposition (row group)
+  column_segment.rs    ColumnSegment: dense bytes + ZoneMap + BloomFilter + HLL
   table_schema.rs      TableSchema: column definitions, row width
   column_def.rs        ColumnDef: name, type, width
   dtype.rs             DataTypeKind: type enum, parse, format
   table_meta.rs        TableMeta: name + id
   table_stats.rs       TableStatistics (placeholder)
-  zone_map.rs          ZoneMap (placeholder)
+  zone_map.rs          ZoneMap: type-aware min/max tracking per segment
   stringt.rs           String arena design (not connected)
   table_format.rs      OutputTable: ASCII table renderer
 

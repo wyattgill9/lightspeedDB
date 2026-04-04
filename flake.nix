@@ -35,8 +35,8 @@
         ];
 
         shellHook = ''
-          echo "Cargo: $(cargo --version)"
-          echo "Rust:  $(rustc --version)"
+          echo "$(cargo --version)"
+          echo "$(rustc --version)"
         '';
       };
     });
