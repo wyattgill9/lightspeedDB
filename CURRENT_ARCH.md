@@ -11,43 +11,40 @@ db/
 │   ├── db-types        Type system, schema, column definitions
 │   ├── db-storage      Row groups, column segments, zone maps, bloom filters
 │   ├── db-catalog      Database and table management, write buffering
-│   ├── db-execution    Query execution and ASCII output formatting
+│   ├── db-execution    Physical plan, table scan executor, ASCII output
+│   ├── db-optimizer    Logical plan, logical→physical planner (pass-through)
+│   ├── db-sql          SQL parser and binder (SELECT * only)
 │   ├── db-cli          CLI entry point (default workspace member)
-│   ├── db-mvcc         Multi-version concurrency control (scaffolding)
-│   ├── db-optimizer    Query optimizer (scaffolding)
-│   ├── db-scheduler    Task scheduling (scaffolding)
-│   ├── db-wal          Write-ahead logging (scaffolding)
-│   ├── db-server       TCP server skeleton (Tokio + socket2)
-│   └── db-sql          SQL parser wrapper (sqlparser)
+│   ├── db-mvcc         Multi-version concurrency control (empty)
+│   ├── db-scheduler    Task scheduling (empty)
+│   ├── db-wal          Write-ahead logging (empty)
+│   └── db-server       TCP server skeleton (Tokio + socket2)
 ├── CLAUDE.md           Project invariants and coding standards
 └── CURRENT_ARCH.md     This file
 ```
 
-The core pipeline is `db-types → db-storage → db-catalog → db-execution
-→ db-cli`. The remaining crates are scaffolding with dependency wiring
-in place but no logic yet.
+The full query pipeline is operational end-to-end:
+`db-sql → db-optimizer → db-execution → db-catalog → db-storage → db-types`.
+The remaining crates (`db-mvcc`, `db-wal`, `db-scheduler`) are empty; `db-server`
+has socket initialisation only.
 
 ## Dependency Graph
 
 ```
-db-cli ─────────────────────────────────────────┐
-├── db-types                                    │
-├── db-storage                                  │
-│   └── db-types                                │
-├── db-catalog                                  │
-│   ├── db-types                                │
-│   └── db-storage                              │
-└── db-execution                                │
-    ├── db-types                                │
-    ├── db-storage                              │
-    └── db-catalog                              │
-                                                │
-db-server ── (tokio, socket2)                   │
-db-sql    ── (sqlparser)                        │
-db-mvcc   ── db-types, db-storage               │
-db-optimizer ── db-types, db-catalog            │
-db-scheduler ── db-types, db-execution          │
-db-wal    ── db-types, db-storage               │
+db-types (no deps)
+ └─ db-storage    ← bytemuck, rapidhash, fastbloom, cardinality-estimator
+     └─ db-catalog ← rapidhash
+         └─ db-execution
+             └─ db-optimizer
+                 └─ db-sql ← sqlparser
+
+db-mvcc      ← db-types, db-storage  (empty)
+db-wal       ← db-types, db-storage  (empty)
+db-scheduler ← db-types, db-execution (empty)
+db-server    ← tokio, socket2
+
+db-cli ← db-types, db-storage, db-catalog, db-execution,
+         db-optimizer, db-sql, bytemuck
 ```
 
 ## Storage Model
@@ -64,32 +61,31 @@ Database
          ├─ row_groups: Vec<RowGroup>      column-major partitions
          ├─ schema: TableSchema
          ├─ meta: TableMeta                name + id
-         └─ stats: TableStatistics         (placeholder)
+         └─ stats: TableStatistics         (empty placeholder)
 ```
 
 ### Write Path
 
-1. `Database::insert(table, bytes)` appends raw bytes to the table's
-   write buffer.
-2. When the buffer reaches **4 096 rows**, it auto-flushes.
-3. `flush_write_buffer()` swaps the buffer out (to avoid aliasing),
-   then calls `write_rows_to_segments`.
-4. Rows are split across row groups. If the active row group is full,
-   a new one is allocated.
+1. `Database::insert(table, bytes)` delegates to `DBTable::insert`.
+2. `DBTable::insert` validates the byte length (must be a multiple of
+   `row_size_bytes`) then extends `write_buffer`.
+3. When `write_buffer.len() / row_size_bytes >= 4 096`, the table
+   auto-flushes via `flush_write_buffer()`.
+4. `flush_write_buffer` drains the buffer and calls
+   `write_rows_to_segments`, which distributes rows across row groups,
+   allocating new ones when the active group is full.
 
 ### RowGroup
 
 Each row group holds up to **131 072 rows** (64 × 2 048). It contains
-one `ColumnSegment` per schema column. The row group tracks its own
-`row_count` and derives `rows_available` from the fixed capacity.
+one `ColumnSegment` per schema column and tracks its own `row_count`.
 
 ### Column-Major Transposition
 
 `RowGroup::insert_rows` iterates **columns outer, rows inner**.
-For each column, it walks every row and copies that column's bytes
-into the column segment. This keeps each column buffer hot in L1/L2
-cache during its entire fill rather than alternating between N buffers
-per row.
+For each column, it walks every incoming row and copies that column's
+bytes into the column segment's buffer. This keeps each column buffer
+hot in cache during its entire fill phase.
 
 ```
 for column in schema.columns():
@@ -102,25 +98,22 @@ for column in schema.columns():
 
 ```rust
 pub struct ColumnSegment {
-    data: Vec<u8>,                   // dense column bytes
-    column_def_index: usize,         // position in schema
-    zone_map: ZoneMap,               // per-segment min/max index
-    bloom: Option<BloomFilter<...>>, // membership filter
-    hll: CardinalityEstimator<...>,  // HyperLogLog++ per column
+    data: Vec<u8>,                                          // dense column bytes
+    column_def_index: usize,                                // position in schema
+    zone_map: ZoneMap,                                      // per-segment min/max
+    bloom: Option<BloomFilter<rapidhash::quality::RandomState>>, // membership filter
+    hll: CardinalityEstimator<[u8], rapidhash::quality::RapidHasher<'static>>, // HLL++
 }
 ```
 
-Every value pushed into a column feeds all three structures:
+Every value pushed feeds all three auxiliary structures:
 
 - **ZoneMap** — type-aware min/max comparison via `bytemuck` zero-copy
   cast; supports range-based segment pruning.
-- **BloomFilter** — membership filter backed by `fastbloom`; supports
-  point-lookup segment pruning (skip segments where a value is
-  provably absent).
-- **HyperLogLog++** — O(1) approximate distinct-count per column per
+- **BloomFilter** — 64-bit, 1-hash membership filter; supports
+  point-lookup segment pruning.
+- **HyperLogLog++** — O(1) approximate distinct-count per column
   segment without a separate pass.
-
-Both ZoneMap and BloomFilter use `rapidhash::quality` for hashing.
 
 ## Type System
 
@@ -132,9 +125,9 @@ All types are fixed-width. The `DataTypeKind` enum covers:
 | U32, I32, F32 | 4 bytes |
 | U8, I8, BOOL | 1 byte |
 
-Byte order is little-endian throughout. Type names are parsed
-case-insensitively. `format_bytes` deserialises a column slice back
-into a display string for output.
+Byte order is little-endian throughout. `DataTypeKind::format_bytes`
+deserialises a column slice to a display string; floats use 6 decimal
+places. Type names are parsed case-insensitively.
 
 ### String Support (Designed, Not Integrated)
 
@@ -144,7 +137,7 @@ variable-length strings:
 - **StringRef**: 16-byte aligned. 4-byte length + 12-byte payload.
   Strings ≤ 12 bytes are inlined; longer strings store a 4-byte
   prefix plus an arena index and offset.
-- **StringBuffer**: Per-row-group arena backed by a linked list of
+- **StringBuffer**: per-row-group arena backed by a linked list of
   1 MB `ArenaBuffer` blocks.
 
 All methods are `todo!()`.
@@ -153,12 +146,12 @@ All methods are `todo!()`.
 
 ```
 TableSchema
- └─ columns: Vec<ColumnDefinition>
+ ├─ columns: Vec<ColumnDefinition>
  └─ row_size_bytes: usize        sum of column widths
 
 ColumnDefinition
- └─ dtype: DataTypeKind
- └─ width: u32
+ ├─ dtype: DataTypeKind
+ ├─ width: u32
  └─ name: String
 ```
 
@@ -166,38 +159,66 @@ ColumnDefinition
 everywhere to validate insert lengths and to stride over row-major
 input buffers.
 
-## Metadata and Statistics
+## Query Pipeline
 
-- **TableMeta**: name (`String`) and monotonic id (`u32`, assigned from
-  `tables.len()`).
-- **TableStatistics**: empty struct, reserved for future counters
-  (row count, byte count, segment count).
+The full pipeline is working for `SELECT *` queries:
 
-## Query Execution
+```
+SQL string
+    │  db-sql::bind()
+    ▼
+LogicalPlan::Scan { table_name, column_indices }
+    │  db-optimizer::plan()
+    ▼
+PhysicalPlan::TableScan { table_name, column_indices }
+    │  db-execution::execute()
+    ▼
+QueryResult { columns: Vec<ResultColumn>, row_count }
+    │  OutputTable::from_query_result()
+    ▼
+ASCII table string
+```
 
-Currently limited to full-table scans:
+### SQL Layer (`db-sql`)
 
-- **OutputTable** in `db-execution` flushes the write buffer, iterates
-  all row groups, reconstructs rows from columnar data, and renders
-  an ASCII table with auto-sized columns.
-- No predicate evaluation, aggregation, or segment pruning exists yet.
+`bind(sql, database)` uses `sqlparser` (GenericDialect) to parse the
+SQL string. It validates:
 
-## SQL Layer
+- Exactly one statement.
+- A `SELECT` body (not UNION / INTERSECT / EXCEPT).
+- Exactly one table in `FROM`, no JOINs.
+- `SELECT *` only — named columns are rejected.
 
-`db-sql` wraps `sqlparser` (v0.61) to parse SQL strings into an AST
-and returns the debug representation. No evaluation.
+On success it returns `LogicalPlan::Scan` with the resolved table name
+and column indices `0..column_count`.
 
-## Network Layer
+Currently uses `panic!` for all error paths.
 
-`db-server` binds a TCP socket on `0.0.0.0:8080` using `socket2` for
-low-level control and `tokio::net::TcpListener` for async accept. It
-currently accepts one connection and exits. No wire protocol, message
-framing, or query routing is implemented.
+### Optimizer (`db-optimizer`)
+
+`plan(logical)` performs a **direct pass-through** from
+`LogicalPlan::Scan` to `PhysicalPlan::TableScan`. No rewrites, no
+cost model. The separation exists for future extension.
+
+### Execution (`db-execution`)
+
+`execute(plan, database)` dispatches to `execute_table_scan`:
+
+1. Flushes the table's write buffer.
+2. Creates a `ResultColumn` (name + type + empty `Vec<u8>`) for each
+   selected column.
+3. Iterates all row groups; for each group appends
+   `segment.data()[..byte_count]` into the matching `ResultColumn`.
+4. Returns `QueryResult { columns, row_count }`.
+
+`OutputTable::from_query_result` formats the result as an ASCII table:
+auto-sized column widths, separator lines, and aligned cell values
+rendered via `DataTypeKind::format_bytes`.
 
 ## Concurrency Model
 
-The engine is **single-writer, single-threaded** today. `Database`
-takes `&mut self` for all mutations. No `Arc`, `Mutex`, or interior
+The engine is **single-writer, single-threaded**. `Database` takes
+`&mut self` for all mutations. No `Arc`, `Mutex`, or interior
 mutability is used.
 
 A comment in `table.rs` marks the planned evolution:
@@ -205,9 +226,6 @@ A comment in `table.rs` marks the planned evolution:
 ```rust
 // will become: row_groups: ArcSwap<Vec<Arc<RowGroup>>>,
 ```
-
-This points toward a future model where readers snapshot row groups
-atomically while a single writer appends new segments.
 
 ## Platform Requirements
 
@@ -231,7 +249,7 @@ atomically while a single writer appends new segments.
 | rapidhash 4.4 | Fast hashing for `HashMap`, ZoneMap, and BloomFilter |
 | cardinality-estimator 1.0 | HyperLogLog++ distinct-count per column |
 | fastbloom 0.17 | Bloom filter for membership-based segment pruning |
-| sqlparser 0.61 | SQL parsing (AST only) |
+| sqlparser 0.61 | SQL parsing (AST + binder) |
 | tokio 1.50 | Async runtime for future server |
 | socket2 0.6 | Low-level socket configuration |
 | criterion 0.5 | Benchmarking (dev dependency) |
@@ -279,13 +297,13 @@ Both use a `Vec3 { x: f32, y: f32, z: f32 }` schema. Sample size is
 ```
 crates/db-types/src/
   lib.rs                 Module declarations
-  data_type.rs           DataTypeKind: type enum, parse, format
+  data_type.rs           DataTypeKind: type enum, parse, byte_width, format_bytes
   column_definition.rs   ColumnDefinition: name, type, width
   table_schema.rs        TableSchema: column definitions, row width
 
 crates/db-storage/src/
   lib.rs                 Module declarations
-  row_group.rs           RowGroup: column-major transposition
+  row_group.rs           RowGroup: column-major transposition, capacity tracking
   segment.rs             ColumnSegment: dense bytes + ZoneMap + BloomFilter + HLL
   zone_map.rs            ZoneMap: type-aware min/max tracking per segment
   varlen.rs              String arena design (not connected)
@@ -294,28 +312,33 @@ crates/db-catalog/src/
   lib.rs                 Module declarations
   database.rs            Database: table map, insert, access
   table.rs               DBTable: write buffer, flush, row group management
-  statistics.rs          TableStatistics (placeholder)
+  statistics.rs          TableStatistics (empty placeholder)
 
 crates/db-catalog/benches/
   insert.rs              Criterion insert benchmarks
 
 crates/db-execution/src/
   lib.rs                 Module declarations
+  physical_plan.rs       PhysicalPlan: TableScan variant
+  query_result.rs        QueryResult, ResultColumn
+  execute.rs             execute(): dispatch + execute_table_scan()
   output.rs              OutputTable: ASCII table renderer
 
-crates/db-cli/src/
-  main.rs                CLI entry point, example usage (64-bit only)
-
-crates/db-server/src/
-  lib.rs                 Tokio TCP accept skeleton
+crates/db-optimizer/src/
+  lib.rs                 Module declarations
+  logical_plan.rs        LogicalPlan: Scan variant
+  planner.rs             plan(): LogicalPlan → PhysicalPlan (pass-through)
 
 crates/db-sql/src/
-  lib.rs                 sqlparser wrapper
+  lib.rs                 bind(): SQL string → LogicalPlan (SELECT * only)
+
+crates/db-cli/src/
+  main.rs                CLI entry point, end-to-end demo (64-bit only)
+
+crates/db-server/src/
+  lib.rs                 Tokio TCP accept skeleton (socket2 init only)
 
 crates/db-mvcc/src/
-  lib.rs                 (empty — scaffolding)
-
-crates/db-optimizer/src/
   lib.rs                 (empty — scaffolding)
 
 crates/db-scheduler/src/

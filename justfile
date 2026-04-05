@@ -6,6 +6,13 @@ run:
 
 bench:
 	cargo bench --bench insert -p db-catalog
+	cargo bench --bench query -p db-execution
+
+bench-insert:
+	cargo bench --bench insert -p db-catalog
+
+bench-query:
+	cargo bench --bench query -p db-execution
 
 check:
 	cargo clippy --workspace

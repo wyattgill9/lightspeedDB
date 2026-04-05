@@ -10,3 +10,11 @@ authors    = ["Wyatt Gill <wyattgill01@outlook.com>"]
 db-types   = { path = "../db-types" }
 db-storage = { path = "../db-storage" }
 db-catalog = { path = "../db-catalog" }
+
+[dev-dependencies]
+bytemuck  = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name    = "query"
+harness = false
