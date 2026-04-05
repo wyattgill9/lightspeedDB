@@ -214,8 +214,7 @@ atomically while a single writer appends new segments.
 ## Platform Requirements
 
 `main.rs` is gated on `#[cfg(target_pointer_width = "64")]`. On
-32-bit targets the binary prints an error and exits. The engine relies
-on 64-bit pointer arithmetic for segment indexing.
+32-bit targets the binary prints an error and exits.
 
 ## Memory Bounds
 
