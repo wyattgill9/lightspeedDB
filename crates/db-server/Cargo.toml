@@ -6,6 +6,3 @@ edition = "2024"
 [dependencies]
 tokio   = { workspace = true }
 socket2 = { workspace = true }
-
-db_core = { package = "db-core", path = "../db-core" }
-

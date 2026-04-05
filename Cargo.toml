@@ -1,17 +1,26 @@
 [workspace]
 members = [
-    "crates/db-core",
+    "crates/db-buffer",
+    "crates/db-catalog",
+    "crates/db-cli",
+    "crates/db-execution",
+    "crates/db-mvcc",
+    "crates/db-optimizer",
+    "crates/db-scheduler",
     "crates/db-server",
-    "crates/db-sql"
+    "crates/db-sql",
+    "crates/db-storage",
+    "crates/db-types",
+    "crates/db-wal",
 ]
 
-default-members  = ["crates/db-core"]
+default-members  = ["crates/db-cli"]
 resolver         = "2"
 
 [workspace.dependencies]
-# db-core
-cardinality-estimator = "1" # HyperLogLog
-fastbloom = "0.17.0"        # Bloom Filter
+# db-storage
+cardinality-estimator = "1"
+fastbloom = "0.17.0"
 
 # db-server
 tokio     = { version = "1.50.0", features = ["full"] }
@@ -24,4 +33,3 @@ sqlparser = "0.61.0"
 bytemuck  = { version = "1.25", features = ["derive"] }
 rapidhash = "4.4.1"
 criterion = { version = "0.5", features = ["html_reports"] }
-

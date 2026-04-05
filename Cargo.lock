@@ -228,22 +228,72 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
-name = "db-core"
+name = "db-buffer"
+version = "0.1.0"
+dependencies = [
+ "db-storage",
+ "db-types",
+]
+
+[[package]]
+name = "db-catalog"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
- "cardinality-estimator",
  "criterion",
- "db-sql",
- "fastbloom",
+ "db-storage",
+ "db-types",
  "rapidhash",
+]
+
+[[package]]
+name = "db-cli"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "db-catalog",
+ "db-execution",
+ "db-storage",
+ "db-types",
+]
+
+[[package]]
+name = "db-execution"
+version = "0.1.0"
+dependencies = [
+ "db-catalog",
+ "db-storage",
+ "db-types",
+]
+
+[[package]]
+name = "db-mvcc"
+version = "0.1.0"
+dependencies = [
+ "db-storage",
+ "db-types",
+]
+
+[[package]]
+name = "db-optimizer"
+version = "0.1.0"
+dependencies = [
+ "db-catalog",
+ "db-types",
+]
+
+[[package]]
+name = "db-scheduler"
+version = "0.1.0"
+dependencies = [
+ "db-execution",
+ "db-types",
 ]
 
 [[package]]
 name = "db-server"
 version = "0.1.0"
 dependencies = [
- "db-core",
  "socket2",
  "tokio",
 ]
@@ -253,6 +303,29 @@ name = "db-sql"
 version = "0.1.0"
 dependencies = [
  "sqlparser",
+]
+
+[[package]]
+name = "db-storage"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "cardinality-estimator",
+ "db-types",
+ "fastbloom",
+ "rapidhash",
+]
+
+[[package]]
+name = "db-types"
+version = "0.1.0"
+
+[[package]]
+name = "db-wal"
+version = "0.1.0"
+dependencies = [
+ "db-storage",
+ "db-types",
 ]
 
 [[package]]

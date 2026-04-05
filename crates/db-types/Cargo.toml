@@ -1,0 +1,9 @@
+[package]
+name       = "db-types"
+version    = "0.1.0"
+edition    = "2024"
+license    = "MIT"
+repository = "https://github.com/wyattgill9/db"
+authors    = ["Wyatt Gill <wyattgill01@outlook.com>"]
+
+[dependencies]

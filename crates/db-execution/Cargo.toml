@@ -1,0 +1,12 @@
+[package]
+name       = "db-execution"
+version    = "0.1.0"
+edition    = "2024"
+license    = "MIT"
+repository = "https://github.com/wyattgill9/db"
+authors    = ["Wyatt Gill <wyattgill01@outlook.com>"]
+
+[dependencies]
+db-types   = { path = "../db-types" }
+db-storage = { path = "../db-storage" }
+db-catalog = { path = "../db-catalog" }

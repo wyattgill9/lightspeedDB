@@ -11,10 +11,7 @@ async fn run_server_main() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = TcpListener::from_std(socket.into())?;
 
-    loop {
-        let (_socket, _addr) = listener.accept().await?;
-        break;
-    }
+    let (_socket, _addr) = listener.accept().await?;
 
     Ok(())
 }
