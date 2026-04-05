@@ -1,6 +1,6 @@
-use db_catalog::DBTable;
+use crate::query_result::QueryResult;
 
-/// Formatted text representation of a table query result.
+/// Formatted text representation of a query result.
 pub struct OutputTable {
     output: String,
 }
@@ -12,35 +12,30 @@ impl std::fmt::Display for OutputTable {
 }
 
 impl OutputTable {
-    /// Build a formatted ASCII table from all row groups.
-    pub fn from_table(table: &DBTable) -> Self {
-        let mut rows: Vec<Vec<String>> = Vec::new();
-        for segment in table.row_groups() {
-            let count = segment.row_count() as usize;
-            for row_index in 0..count {
-                let cells: Vec<String> = table
-                    .schema()
-                    .columns()
-                    .iter()
-                    .enumerate()
-                    .map(|(column_index, column)| {
-                        let width = column.byte_width();
-                        let start = row_index * width;
-                        let end = start + width;
-                        let column_data = segment.columns()[column_index].data();
-                        column.data_type().format_bytes(&column_data[start..end])
-                    })
-                    .collect();
-                rows.push(cells);
-            }
+    pub fn from_query_result(result: &QueryResult) -> Self {
+        let row_count = result.row_count();
+        let mut rows: Vec<Vec<String>> = Vec::with_capacity(row_count);
+
+        for row_index in 0..row_count {
+            let cells: Vec<String> = result
+                .columns()
+                .iter()
+                .map(|column| {
+                    let width = column.byte_width();
+                    let start = row_index * width;
+                    let end = start + width;
+                    column.data_type().format_bytes(&column.data()[start..end])
+                })
+                .collect();
+            rows.push(cells);
         }
 
-        let headers: Vec<String> = table
-            .schema()
+        let headers: Vec<String> = result
             .columns()
             .iter()
             .map(|column| column.name().to_owned())
             .collect();
+
         let mut column_widths: Vec<usize> = headers.iter().map(|header| header.len()).collect();
         for row in &rows {
             for (index, cell) in row.iter().enumerate() {
@@ -51,7 +46,6 @@ impl OutputTable {
         let separator = format_separator(&column_widths);
         let mut output = String::new();
         output.push('\n');
-        output.push_str(&format!("Table: {}\n", table.name()));
         output.push_str(&separator);
         output.push('\n');
         output.push_str(&format_row(&headers, &column_widths));

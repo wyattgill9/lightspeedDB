@@ -15,4 +15,6 @@ db-types     = { path = "../db-types" }
 db-storage   = { path = "../db-storage" }
 db-catalog   = { path = "../db-catalog" }
 db-execution = { path = "../db-execution" }
+db-optimizer = { path = "../db-optimizer" }
+db-sql       = { path = "../db-sql" }
 bytemuck     = { workspace = true }

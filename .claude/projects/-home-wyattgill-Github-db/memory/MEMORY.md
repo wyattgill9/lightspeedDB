@@ -1,0 +1,1 @@
+- [Panics over snafu](feedback_panics_over_snafu.md) — Use panics during early dev, skip snafu for now

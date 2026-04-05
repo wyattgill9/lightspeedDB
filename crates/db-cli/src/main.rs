@@ -3,13 +3,7 @@
 use bytemuck::{Pod, Zeroable};
 
 use db_catalog::Database;
-use db_execution::OutputTable;
-
-fn print_table(db: &mut Database, table_name: &str) -> OutputTable {
-    let table = db.table_mut(table_name);
-    table.flush_write_buffer();
-    OutputTable::from_table(table)
-}
+use db_execution::output::OutputTable;
 
 #[cfg(target_pointer_width = "64")]
 fn main() {
@@ -38,9 +32,13 @@ fn main() {
     ]);
 
     db.insert("vec3", point_bytes);
+    db.table_mut("vec3").flush_write_buffer();
 
-    let result = print_table(&mut db, "vec3");
-    println!("{result}");
+    let logical  = db_sql::bind("SELECT * FROM vec3", &db);
+    let physical = db_optimizer::plan(&logical);
+    let result   = db_execution::execute::execute(&physical, &db);
+    let output   = OutputTable::from_query_result(&result);
+    println!("{output}");
 }
 
 #[cfg(not(target_pointer_width = "64"))]

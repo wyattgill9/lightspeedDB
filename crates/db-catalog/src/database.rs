@@ -48,6 +48,10 @@ impl Database {
             .unwrap_or_else(|| panic!("table not found: {table_name}"))
     }
 
+    pub fn get_table(&self, table_name: &str) -> Option<&DBTable> {
+        self.tables.get(table_name)
+    }
+
     pub fn table_mut(&mut self, table_name: &str) -> &mut DBTable {
         self.tables
             .get_mut(table_name)

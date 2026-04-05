@@ -245,6 +245,8 @@ dependencies = [
  "bytemuck",
  "db-catalog",
  "db-execution",
+ "db-optimizer",
+ "db-sql",
  "db-storage",
  "db-types",
 ]
@@ -271,6 +273,7 @@ name = "db-optimizer"
 version = "0.1.0"
 dependencies = [
  "db-catalog",
+ "db-execution",
  "db-types",
 ]
 
@@ -294,6 +297,9 @@ dependencies = [
 name = "db-sql"
 version = "0.1.0"
 dependencies = [
+ "db-catalog",
+ "db-optimizer",
+ "db-types",
  "sqlparser",
 ]
 

@@ -7,5 +7,8 @@ repository = "https://github.com/wyattgill9/db"
 authors    = ["Wyatt Gill <wyattgill01@outlook.com>"]
 
 [dependencies]
-sqlparser = { workspace = true }
+db-types     = { path = "../db-types" }
+db-catalog   = { path = "../db-catalog" }
+db-optimizer = { path = "../db-optimizer" }
+sqlparser    = { workspace = true }
 
