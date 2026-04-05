@@ -13,7 +13,6 @@ db/
 │   ├── db-catalog      Database and table management, write buffering
 │   ├── db-execution    Query execution and ASCII output formatting
 │   ├── db-cli          CLI entry point (default workspace member)
-│   ├── db-buffer       Memory buffering layer (scaffolding)
 │   ├── db-mvcc         Multi-version concurrency control (scaffolding)
 │   ├── db-optimizer    Query optimizer (scaffolding)
 │   ├── db-scheduler    Task scheduling (scaffolding)
@@ -45,7 +44,6 @@ db-cli ────────────────────────�
                                                 │
 db-server ── (tokio, socket2)                   │
 db-sql    ── (sqlparser)                        │
-db-buffer ── db-types, db-storage               │
 db-mvcc   ── db-types, db-storage               │
 db-optimizer ── db-types, db-catalog            │
 db-scheduler ── db-types, db-execution          │
@@ -313,9 +311,6 @@ crates/db-server/src/
 
 crates/db-sql/src/
   lib.rs                 sqlparser wrapper
-
-crates/db-buffer/src/
-  lib.rs                 (empty — scaffolding)
 
 crates/db-mvcc/src/
   lib.rs                 (empty — scaffolding)

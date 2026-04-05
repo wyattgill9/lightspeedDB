@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "crates/db-buffer",
     "crates/db-catalog",
     "crates/db-cli",
     "crates/db-execution",
