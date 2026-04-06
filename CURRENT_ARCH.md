@@ -49,7 +49,7 @@ row-major bytes
   -> db_catalog::Database::insert()
   -> DBTable write buffer
   -> DBTable::flush_write_buffer()
-  -> db_storage::TableParitition
+  -> db_storage::TablePartition
   -> per-column ColumnSegment storage
 ```
 
@@ -75,13 +75,12 @@ formats floats with 6 decimal places.
 
 Owns the physical in-memory column storage.
 
-- `TableParitition` is the row-group container
+- `TablePartition` is the row-group container
 - `ColumnSegment` stores one dense byte vector per column
 - `ZoneMap` tracks per-segment min/max bytes
 - `varlen.rs` exists but is not compiled or integrated
 
-The crate intentionally exposes the misspelled `TableParitition` type because
-that is the current code and public API.
+The crate exposes `TablePartition` as the row-group container type.
 
 ### `db-catalog`
 
@@ -173,7 +172,7 @@ Database
     └── DBTable
         ├── meta: TableMeta { name, id }
         ├── schema: TableSchema
-        ├── table_parititions: Vec<TableParitition>
+        ├── table_partitions: Vec<TablePartition>
         ├── stats: TableStatistics
         └── write_buffer: Vec<u8>
 ```
@@ -188,7 +187,7 @@ Database
 
 ### Partitions
 
-Each `TableParitition` holds:
+Each `TablePartition` holds:
 
 - `columns: Vec<ColumnSegment>`
 - `row_count: usize`
@@ -217,7 +216,7 @@ Every inserted value:
 
 ### Column-Major Transposition
 
-`TableParitition::insert_rows()` transposes row-major input into column-major
+`TablePartition::insert_rows()` transposes row-major input into column-major
 storage by iterating columns outermost and rows innermost.
 
 For each column:

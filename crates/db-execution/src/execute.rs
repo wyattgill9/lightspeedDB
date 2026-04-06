@@ -30,14 +30,14 @@ fn execute_table_scan<'db>(
 
     let mut row_count = 0usize;
 
-    for table_paritition in table.table_parititions() {
-        let partition_row_count = table_paritition.row_count();
+    for table_partition in table.table_partitions() {
+        let partition_row_count = table_partition.row_count();
         if partition_row_count == 0 {
             continue;
         }
 
         for (result_column, &source_index) in columns.iter_mut().zip(column_indices.iter()) {
-            let segment = &table_paritition.columns()[source_index];
+            let segment = &table_partition.columns()[source_index];
             let byte_width = result_column.byte_width();
             let byte_count = partition_row_count * byte_width;
             result_column.push_chunk(&segment.data()[..byte_count], partition_row_count);
