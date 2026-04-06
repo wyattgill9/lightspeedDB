@@ -12,7 +12,7 @@ impl std::fmt::Display for OutputTable {
 }
 
 impl OutputTable {
-    pub fn from_query_result(result: &QueryResult) -> Self {
+    pub fn from_query_result(result: &QueryResult<'_>) -> Self {
         let row_count = result.row_count();
         let mut rows: Vec<Vec<String>> = Vec::with_capacity(row_count);
 
@@ -20,12 +20,7 @@ impl OutputTable {
             let cells: Vec<String> = result
                 .columns()
                 .iter()
-                .map(|column| {
-                    let width = column.byte_width();
-                    let start = row_index * width;
-                    let end = start + width;
-                    column.data_type().format_bytes(&column.data()[start..end])
-                })
+                .map(|column| column.data_type().format_bytes(column.row_bytes(row_index)))
                 .collect();
             rows.push(cells);
         }

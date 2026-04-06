@@ -2,12 +2,12 @@ use db_types::TableSchema;
 
 use crate::segment::ColumnSegment;
 
-const TABLE_PARITITION_CAPACITY: u32 = 64 * 2048;
+const TABLE_PARITITION_CAPACITY: usize = 64 * 2048;
 
 #[derive(Debug)]
 pub struct TableParitition {
     columns: Vec<ColumnSegment>,
-    row_count: u32,
+    row_count: usize,
 }
 
 impl TableParitition {
@@ -29,7 +29,7 @@ impl TableParitition {
         let row_byte_width = schema.row_size_bytes();
         let row_count = bytes.len() / row_byte_width;
 
-        if row_count > self.rows_available() as usize {
+        if row_count > self.rows_available() {
             panic!(
                 "table paritition overflow: {} rows requested, {} available",
                 row_count,
@@ -50,7 +50,7 @@ impl TableParitition {
                 }
                 col_byte_start = col_byte_end;
             }
-            self.row_count += u32::try_from(row_count).expect("row count fits u32");
+            self.row_count += row_count;
         }
     }
 
@@ -58,11 +58,11 @@ impl TableParitition {
         &self.columns
     }
 
-    pub fn row_count(&self) -> u32 {
+    pub fn row_count(&self) -> usize {
         self.row_count
     }
 
-    pub fn rows_available(&self) -> u32 {
+    pub fn rows_available(&self) -> usize {
         TABLE_PARITITION_CAPACITY - self.row_count
     }
 }

@@ -3,7 +3,7 @@ use db_catalog::Database;
 use crate::physical_plan::PhysicalPlan;
 use crate::query_result::{QueryResult, ResultColumn};
 
-pub fn execute(plan: &PhysicalPlan, database: &Database) -> QueryResult {
+pub fn execute<'db>(plan: &PhysicalPlan, database: &'db Database) -> QueryResult<'db> {
     match plan {
         PhysicalPlan::TableScan {
             table_name,
@@ -12,15 +12,15 @@ pub fn execute(plan: &PhysicalPlan, database: &Database) -> QueryResult {
     }
 }
 
-fn execute_table_scan(
-    database: &Database,
+fn execute_table_scan<'db>(
+    database: &'db Database,
     table_name: &str,
     column_indices: &[usize],
-) -> QueryResult {
+) -> QueryResult<'db> {
     let table = database.table(table_name);
     let schema = table.schema();
 
-    let mut columns: Vec<ResultColumn> = column_indices
+    let mut columns: Vec<ResultColumn<'db>> = column_indices
         .iter()
         .map(|&index| {
             let definition = schema.column_at(index);
@@ -31,12 +31,16 @@ fn execute_table_scan(
     let mut row_count = 0usize;
 
     for table_paritition in table.table_parititions() {
-        let partition_row_count = table_paritition.row_count() as usize;
+        let partition_row_count = table_paritition.row_count();
+        if partition_row_count == 0 {
+            continue;
+        }
+
         for (result_column, &source_index) in columns.iter_mut().zip(column_indices.iter()) {
             let segment = &table_paritition.columns()[source_index];
             let byte_width = result_column.byte_width();
             let byte_count = partition_row_count * byte_width;
-            result_column.extend_from_slice(&segment.data()[..byte_count]);
+            result_column.push_chunk(&segment.data()[..byte_count], partition_row_count);
         }
         row_count += partition_row_count;
     }
