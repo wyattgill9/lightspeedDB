@@ -9,7 +9,7 @@ In-memory, single-writer, designed for high-throughput scan workloads.
 db/
 ├── crates/
 │   ├── db-types        Type system, schema, column definitions
-│   ├── db-storage      Row groups, column segments, zone maps, bloom filters
+│   ├── db-storage      TableParititions, column segments, zone maps, bloom filters
 │   ├── db-catalog      Database and table management, write buffering
 │   ├── db-execution    Physical plan, table scan executor, ASCII output
 │   ├── db-optimizer    Logical plan, logical→physical planner (pass-through)
@@ -51,14 +51,14 @@ db-cli ← db-types, db-storage, db-catalog, db-execution,
 
 The engine stores data **column-major**. Rows arrive as tightly-packed
 byte arrays (array-of-structs), get buffered, then transposed into
-per-column byte vectors inside immutable row groups.
+per-column byte vectors inside immutable table parititions.
 
 ```
 Database
  └─ tables: HashMap<String, DBTable>      (rapidhash::fast)
      └─ DBTable
          ├─ write_buffer: Vec<u8>          row-major staging area
-         ├─ row_groups: Vec<RowGroup>      column-major partitions
+         ├─ table_parititions: Vec<TableParitition>  column-major partitions
          ├─ schema: TableSchema
          ├─ meta: TableMeta                name + id
          └─ stats: TableStatistics         (empty placeholder)
@@ -72,17 +72,18 @@ Database
 3. When `write_buffer.len() / row_size_bytes >= 4 096`, the table
    auto-flushes via `flush_write_buffer()`.
 4. `flush_write_buffer` drains the buffer and calls
-   `write_rows_to_segments`, which distributes rows across row groups,
-   allocating new ones when the active group is full.
+   `write_rows_to_table_parititions`, which distributes rows across
+   table parititions, allocating new ones when the active partition is
+   full.
 
-### RowGroup
+### TableParitition
 
-Each row group holds up to **131 072 rows** (64 × 2 048). It contains
+Each table paritition holds up to **131 072 rows** (64 × 2 048). It contains
 one `ColumnSegment` per schema column and tracks its own `row_count`.
 
 ### Column-Major Transposition
 
-`RowGroup::insert_rows` iterates **columns outer, rows inner**.
+`TableParitition::insert_rows` iterates **columns outer, rows inner**.
 For each column, it walks every incoming row and copies that column's
 bytes into the column segment's buffer. This keeps each column buffer
 hot in cache during its entire fill phase.
@@ -207,7 +208,7 @@ cost model. The separation exists for future extension.
 1. Flushes the table's write buffer.
 2. Creates a `ResultColumn` (name + type + empty `Vec<u8>`) for each
    selected column.
-3. Iterates all row groups; for each group appends
+3. Iterates all table parititions; for each partition appends
    `segment.data()[..byte_count]` into the matching `ResultColumn`.
 4. Returns `QueryResult { columns, row_count }`.
 
@@ -224,7 +225,7 @@ mutability is used.
 A comment in `table.rs` marks the planned evolution:
 
 ```rust
-// will become: row_groups: ArcSwap<Vec<Arc<RowGroup>>>,
+// will become: table_parititions: ArcSwap<Vec<Arc<TableParitition>>>,
 ```
 
 ## Platform Requirements
@@ -237,7 +238,7 @@ A comment in `table.rs` marks the planned evolution:
 | Component | Capacity | Enforcement |
 |-----------|----------|-------------|
 | Write buffer | 4 096 rows | Auto-flush when full |
-| Row group | 131 072 rows | Allocate new when full |
+| TableParitition | 131 072 rows | Allocate new when full |
 | Table count | u32::MAX | Panic on overflow |
 | Row width | Computed at schema creation | Validated on each insert |
 
@@ -277,8 +278,9 @@ Both use a `Vec3 { x: f32, y: f32, z: f32 }` schema. Sample size is
                             │ flush (auto at capacity or explicit)
                             ▼
                 ┌───────────────────────┐
-                │  write_rows_to_       │  split across row groups,
-                │  segments()           │  allocate new if full
+                │  write_rows_to_table_ │  split across table
+                │  parititions()        │  parititions, allocate new
+                │                       │  if full
                 └───────────┬───────────┘
                             │
               ┌─────────────┼─────────────┐
@@ -303,7 +305,7 @@ crates/db-types/src/
 
 crates/db-storage/src/
   lib.rs                 Module declarations
-  row_group.rs           RowGroup: column-major transposition, capacity tracking
+  table_paritition.rs    TableParitition: column-major transposition, capacity tracking
   segment.rs             ColumnSegment: dense bytes + ZoneMap + BloomFilter + HLL
   zone_map.rs            ZoneMap: type-aware min/max tracking per segment
   varlen.rs              String arena design (not connected)
@@ -311,7 +313,7 @@ crates/db-storage/src/
 crates/db-catalog/src/
   lib.rs                 Module declarations
   database.rs            Database: table map, insert, access
-  table.rs               DBTable: write buffer, flush, row group management
+  table.rs               DBTable: write buffer, flush, table paritition management
   statistics.rs          TableStatistics (empty placeholder)
 
 crates/db-catalog/benches/

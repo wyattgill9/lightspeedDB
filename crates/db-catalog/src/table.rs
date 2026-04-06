@@ -1,4 +1,4 @@
-use db_storage::RowGroup;
+use db_storage::TableParitition;
 use db_types::TableSchema;
 
 use crate::statistics::TableStatistics;
@@ -29,7 +29,7 @@ impl TableMeta {
 pub struct DBTable {
     meta: TableMeta,
     schema: TableSchema,
-    row_groups: Vec<RowGroup>,
+    table_parititions: Vec<TableParitition>,
     stats: TableStatistics,
 
     write_buffer: Vec<u8>,
@@ -37,19 +37,19 @@ pub struct DBTable {
 
 impl DBTable {
     pub fn new(name: String, id: u32, schema: TableSchema) -> Self {
-        let row_groups = vec![RowGroup::new(&schema)];
+        let table_parititions = vec![TableParitition::new(&schema)];
         let buffer_capacity_bytes = CAPACITY_ROWS_WRITE_BUFFER * schema.row_size_bytes();
 
         Self {
             meta: TableMeta::new(name, id),
             schema,
-            row_groups,
+            table_parititions,
             stats: TableStatistics::new(),
             write_buffer: Vec::with_capacity(buffer_capacity_bytes),
         }
     }
 
-    /// Buffer rows; flush to partitions automatically when the
+    /// Buffer rows; flush to table parititions automatically when the
     /// buffer reaches capacity.
     pub fn insert(&mut self, bytes: &[u8]) {
         let row_byte_width = self.schema.row_size_bytes();
@@ -69,43 +69,47 @@ impl DBTable {
         }
     }
 
-    /// Drain any buffered rows into row group partitions.
+    /// Drain any buffered rows into table parititions.
     pub fn flush_write_buffer(&mut self) {
         if self.write_buffer.is_empty() {
             return;
         }
         let mut buffer = Vec::new();
         std::mem::swap(&mut self.write_buffer, &mut buffer);
-        self.write_rows_to_segments(&buffer);
+        self.write_rows_to_table_parititions(&buffer);
         buffer.clear();
         std::mem::swap(&mut self.write_buffer, &mut buffer);
     }
 
-    fn write_rows_to_segments(&mut self, bytes: &[u8]) {
+    fn write_rows_to_table_parititions(&mut self, bytes: &[u8]) {
         let row_byte_width = self.schema.row_size_bytes();
         let row_count_total = bytes.len() / row_byte_width;
         let mut row_count_done = 0usize;
 
         while row_count_done < row_count_total {
             let is_full = self
-                .row_groups
+                .table_parititions
                 .last()
-                .is_none_or(|rg| rg.rows_available() == 0);
+                .is_none_or(|table_paritition| table_paritition.rows_available() == 0);
 
             if is_full {
-                self.row_groups.push(RowGroup::new(&self.schema));
+                self.table_parititions
+                    .push(TableParitition::new(&self.schema));
             } else {
-                // current row group has capacity; no action needed
+                // Current table paritition has capacity; no action needed.
             }
 
             let schema = &self.schema;
-            let row_group = self.row_groups.last_mut().expect("row group exists");
+            let table_paritition = self
+                .table_parititions
+                .last_mut()
+                .expect("table paritition exists");
 
-            let row_count_chunk =
-                (row_count_total - row_count_done).min(row_group.rows_available() as usize);
+            let row_count_chunk = (row_count_total - row_count_done)
+                .min(table_paritition.rows_available() as usize);
             let byte_start = row_count_done * row_byte_width;
             let byte_end = byte_start + row_count_chunk * row_byte_width;
-            row_group.insert_rows(schema, &bytes[byte_start..byte_end]);
+            table_paritition.insert_rows(schema, &bytes[byte_start..byte_end]);
             row_count_done += row_count_chunk;
         }
     }
@@ -122,8 +126,8 @@ impl DBTable {
         &self.schema
     }
 
-    pub fn row_groups(&self) -> &[RowGroup] {
-        &self.row_groups
+    pub fn table_parititions(&self) -> &[TableParitition] {
+        &self.table_parititions
     }
 
     pub fn stats(&self) -> &TableStatistics {

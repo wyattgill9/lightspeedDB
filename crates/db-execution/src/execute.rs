@@ -30,15 +30,15 @@ fn execute_table_scan(
 
     let mut row_count = 0usize;
 
-    for row_group in table.row_groups() {
-        let group_row_count = row_group.row_count() as usize;
+    for table_paritition in table.table_parititions() {
+        let partition_row_count = table_paritition.row_count() as usize;
         for (result_column, &source_index) in columns.iter_mut().zip(column_indices.iter()) {
-            let segment = &row_group.columns()[source_index];
+            let segment = &table_paritition.columns()[source_index];
             let byte_width = result_column.byte_width();
-            let byte_count = group_row_count * byte_width;
+            let byte_count = partition_row_count * byte_width;
             result_column.extend_from_slice(&segment.data()[..byte_count]);
         }
-        row_count += group_row_count;
+        row_count += partition_row_count;
     }
 
     QueryResult::new(columns, row_count)

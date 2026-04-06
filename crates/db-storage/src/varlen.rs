@@ -25,7 +25,7 @@ struct StringBuffer {
     buffer: LinkedList<ArenaBuffer>, // 1 MB
 }
 
-// Per RowGroup
+// Per TableParitition
 impl StringBuffer {
     fn alloc(data: &[u8]) -> (u32, u32) {
         // (start, offset)

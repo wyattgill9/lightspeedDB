@@ -2,15 +2,15 @@ use db_types::TableSchema;
 
 use crate::segment::ColumnSegment;
 
-const ROW_GROUP_CAPACITY: u32 = 64 * 2048;
+const TABLE_PARITITION_CAPACITY: u32 = 64 * 2048;
 
 #[derive(Debug)]
-pub struct RowGroup {
+pub struct TableParitition {
     columns: Vec<ColumnSegment>,
     row_count: u32,
 }
 
-impl RowGroup {
+impl TableParitition {
     pub fn new(schema: &TableSchema) -> Self {
         let columns = (0..schema.column_count()).map(ColumnSegment::new).collect();
 
@@ -31,7 +31,7 @@ impl RowGroup {
 
         if row_count > self.rows_available() as usize {
             panic!(
-                "row group overflow: {} rows requested, {} available",
+                "table paritition overflow: {} rows requested, {} available",
                 row_count,
                 self.rows_available()
             );
@@ -63,6 +63,6 @@ impl RowGroup {
     }
 
     pub fn rows_available(&self) -> u32 {
-        ROW_GROUP_CAPACITY - self.row_count
+        TABLE_PARITITION_CAPACITY - self.row_count
     }
 }
