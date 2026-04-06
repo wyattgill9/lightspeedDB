@@ -10,7 +10,7 @@
 - Explicit, simple control flow. No recursion. Each abstraction earns its keep.
 - Limit everything. All loops, queues, retries: fixed upper bound. Fail-fast on violation.
 - Split compound conditions into nested `if/else`. Every `if` gets a matching `else`.
-- Push `if`s up, `for`s down. Centralize control in parent; pure computation in leaves.
+- Push `if`s up, `for`s down. Centralize control in parent; pure computation in leafs.
 - Batch inbound, process on your schedule, bound work per period. Don't react to external events directly.
 - `snafu` only. `anyhow`/`eyre` banned. Typed errors only — no bare `String`, no `Whatever` returns.
 - Every `?` goes through an explicit context selector naming the operation that failed.
