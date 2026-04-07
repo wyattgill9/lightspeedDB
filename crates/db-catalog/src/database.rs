@@ -42,6 +42,10 @@ impl Database {
         table.insert(bytes);
     }
 
+    pub fn flush_table_writes(&mut self, table_name: &str) {
+        self.table_mut(table_name).flush_write_buffer()
+    }
+
     pub fn table(&self, table_name: &str) -> &DBTable {
         self.tables
             .get(table_name)

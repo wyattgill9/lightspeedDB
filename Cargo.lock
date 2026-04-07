@@ -300,7 +300,6 @@ name = "db-sql"
 version = "0.1.0"
 dependencies = [
  "db-catalog",
- "db-optimizer",
  "db-types",
  "sqlparser",
 ]

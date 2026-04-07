@@ -1,9 +1,9 @@
-struct ParsedStatement(pub(crate) sqlparser::ast::Statement);
+use db_catalog::Database;
+use db_types::{ResolvedPlan, UnresolvedPlan};
 
-/// Parse and bind a SQL statement against the catalog.
-///
-/// Returns a LogicalPlan with all names resolved to indices.
-fn parse(sql: &str) -> ParsedStatement {
+pub struct ParsedStatement(sqlparser::ast::Statement);
+
+pub fn parse(sql: &str) -> ParsedStatement {
     let dialect = sqlparser::dialect::GenericDialect {};
 
     let mut statements = sqlparser::parser::Parser::parse_sql(&dialect, sql)
@@ -16,49 +16,10 @@ fn parse(sql: &str) -> ParsedStatement {
     ParsedStatement(statements.swap_remove(0))
 }
 
-    // let sqlparser::ast::Statement::Query(query) = statement else {
-    //     panic!("only SELECT queries are supported");
-    // };
+pub fn translate(_statement: ParsedStatement) -> UnresolvedPlan {
+    UnresolvedPlan::default()
+}
 
-    // let sqlparser::ast::SetExpr::Select(select) = *query.body else {
-    //     panic!("only simple SELECT statements are supported");
-    // };
-
-
-    // let table = database
-    //     .get_table(&table_name)
-    //     .unwrap_or_else(|| panic!("table not found: {table_name}"));
-
-    // LogicalPlan::Scan {
-    //     table_name,
-    //     column_indices,
-    // }
-// }
-
-// fn bind_from_clause(from: &[sqlparser::ast::TableWithJoins]) -> String {
-//     if from.len() != 1 {
-//         panic!("expected exactly one table in FROM, got {}", from.len());
-//     }
-
-//     let table_with_joins = &from[0];
-
-//     if !table_with_joins.joins.is_empty() {
-//         panic!("JOIN is not supported yet");
-//     }
-
-//     let sqlparser::ast::TableFactor::Table { name, .. } = &table_with_joins.relation else {
-//         panic!("only simple table references are supported");
-//     };
-
-//     format!("{}", name)
-// }
-
-// fn bind_projection(
-//     projection: &[sqlparser::ast::SelectItem],
-//     schema: &db_types::TableSchema,
-// ) -> Vec<usize> {
-//     match projection {
-//         [sqlparser::ast::SelectItem::Wildcard(_)] => (0..schema.column_count()).collect(),
-//         _ => panic!("only SELECT * is supported yet"),
-//     }
-// }
+pub fn bind(_plan: UnresolvedPlan, _db: &Database) -> ResolvedPlan {
+    ResolvedPlan::default()
+}

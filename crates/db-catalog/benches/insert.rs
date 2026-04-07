@@ -12,12 +12,16 @@ struct Vec3 {
 }
 
 #[rustfmt::skip]
-fn fresh_table() -> DBTable {
-    DBTable::new("bench".to_owned(), 0, &[
+fn schema() -> TableSchema {
+    TableSchema::from_fields(&[
         ("x", "f32"),
         ("y", "f32"),
         ("z", "f32")
-    ]);
+    ])
+}
+
+fn fresh_table() -> DBTable {
+    DBTable::new("bench".to_owned(), 0, schema())
 }
 
 #[rustfmt::skip]

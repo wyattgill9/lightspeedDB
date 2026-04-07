@@ -1,7 +1,10 @@
-pub mod execute;
-pub mod output;
-pub mod query_result;
+use db_catalog::Database;
+use db_types::{LogicalPlan, PhysicalPlan, QueryResult};
 
-pub use execute::execute;
-pub use output::OutputTable;
-pub use query_result::{QueryResult, ResultColumn};
+pub fn physical_plan(_lplan: LogicalPlan) -> PhysicalPlan {
+    PhysicalPlan::default()
+}
+
+pub fn execute(_pplan: PhysicalPlan, _database: &Database) -> QueryResult {
+    QueryResult::default()
+}

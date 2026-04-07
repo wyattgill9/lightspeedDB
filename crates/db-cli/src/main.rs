@@ -3,7 +3,7 @@
 use bytemuck::{Pod, Zeroable};
 
 use db_catalog::Database;
-use db_execution::output::OutputTable;
+use db_types::QueryResult;
 
 #[cfg(target_pointer_width = "64")]
 fn main() {
@@ -32,35 +32,20 @@ fn main() {
     ]);
 
     db.insert("vec3", point_bytes);
-    db.table_mut("vec3").flush_write_buffer();
+    db.flush_table_writes("vec3");
 
-    // let _  = db_sql::bind("SELECT col1 FROM vec3", &db);
+    let output = run_sql_query("SELECT col1 FROM vec3", &db);
 
-    // let _ = db_sql::bind("SELECT col1, col2 FROM table1", &db);
-    // let _ = db_sql::bind("SELECT * FROM table1", &db);
-    // let _ = db_sql::bind("SELECT col1 FROM table1 WHERE col1 = 'value'", &db);
-    // let _ = db_sql::bind("SELECT col1 FROM table1 WHERE col1 > 10 AND col2 < 100", &db);
-    // let _ = db_sql::bind("SELECT col1 FROM table1 WHERE col1 = 1 OR col2 = 2", &db);
-    // let _ = db_sql::bind("SELECT COUNT(*) FROM table1", &db);
-    // let _ = db_sql::bind("SELECT col1, COUNT(*) FROM table1 GROUP BY col1", &db);
-    // let _ = db_sql::bind("SELECT col1, SUM(col2), AVG(col3) FROM table1 GROUP BY col1", &db);
-    // let _ = db_sql::bind("SELECT col1, MIN(col2), MAX(col2) FROM table1 GROUP BY col1", &db);
-    // let _ = db_sql::bind("SELECT col1 FROM table1 ORDER BY col1 ASC", &db);
-    // let _ = db_sql::bind("SELECT col1 FROM table1 ORDER BY col1 DESC", &db);
-    // let _ = db_sql::bind("SELECT col1 FROM table1 LIMIT 10", &db);
-    // let _ = db_sql::bind("SELECT col1 FROM table1 LIMIT 10 OFFSET 20", &db);
-    // let _ = db_sql::bind("SELECT col1, COUNT(*) FROM table1 GROUP BY col1 HAVING COUNT(*) > 5", &db);
-    // let _ = db_sql::bind("SELECT col1, col2 * col3 AS revenue FROM table1", &db);
-    // let _ = db_sql::bind("SELECT COUNT(DISTINCT col1) FROM table1", &db);
-    // let _ = db_sql::bind("SELECT col1 FROM table1 WHERE col1 IN ('a', 'b', 'c')", &db);
-
-    // let physical = db_optimizer::plan(&logical);
-    // let result   = db_execution::execute::execute(&physical, &db);
-    // let output   = OutputTable::from_query_result(&result);
-    // println!("{output}");
+    println!("{:?}", output);
 }
 
-#[cfg(not(target_pointer_width = "64"))]
-fn main() {
-    println!("This program requires a 64-bit target.");
+fn run_sql_query(sql: &str, db: &Database) -> QueryResult {
+    let parsed     = db_sql::parse(sql);
+    let unresolved = db_sql::translate(parsed);
+    let resolved   = db_sql::bind(unresolved, &db);
+    let logical    = db_optimizer::build_plan(resolved);
+    let optimized  = db_optimizer::optimize(logical);
+    let physical   = db_execution::physical_plan(optimized);
+
+    db_execution::execute(physical, &db)
 }

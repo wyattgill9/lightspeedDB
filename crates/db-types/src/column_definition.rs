@@ -1,4 +1,4 @@
-use crate::data_type::DataTypeKind;
+use crate::dtype::DataTypeKind;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ColumnDefinition {

@@ -1,3 +1,9 @@
-pub mod planner;
+use db_types::{LogicalPlan, ResolvedPlan};
 
-pub use planner::plan;
+pub fn build_plan(_rplan: ResolvedPlan) -> LogicalPlan {
+    LogicalPlan::default()
+}
+
+pub fn optimize(_lplan: LogicalPlan) -> LogicalPlan {
+    LogicalPlan::default()
+}
