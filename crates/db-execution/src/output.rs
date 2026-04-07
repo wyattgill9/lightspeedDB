@@ -1,4 +1,4 @@
-use crate::query_result::QueryResult;
+use crate::QueryResult;
 
 /// Formatted text representation of a query result.
 pub struct OutputTable {
