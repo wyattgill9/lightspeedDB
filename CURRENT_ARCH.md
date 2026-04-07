@@ -61,12 +61,15 @@ visible. The CLI does this manually.
 
 ### `db-types`
 
-Owns the fixed-width type system and schema metadata.
+Owns the fixed-width type system, schema metadata, and IR plan types.
 
 - `DataTypeKind` supports `U64`, `U32`, `U8`, `I64`, `I32`, `I8`, `F32`,
   `F64`, and `BOOL`
 - `ColumnDefinition` stores column name, type, and cached width
 - `TableSchema` stores ordered columns and precomputed `row_size_bytes`
+- `LogicalPlan` is the output of the SQL binder; currently has only `Scan`
+- `PhysicalPlan` is the input to the execution engine; currently has only
+  `TableScan`
 
 Type parsing is case-insensitive. Display formatting is little-endian and
 formats floats with 6 decimal places.
@@ -97,8 +100,8 @@ panic if the count would exceed `u32::MAX`.
 
 Owns physical plan execution and text output formatting.
 
-- `PhysicalPlan` currently has only `TableScan`
-- `execute()` walks table partitions and builds a `QueryResult`
+- `execute()` accepts a `PhysicalPlan` (from `db-types`) and walks table
+  partitions to build a `QueryResult`
 - `OutputTable` renders the result as an ASCII grid
 
 `QueryResult` is chunked and zero-copy over stored partition data. It does not
@@ -108,10 +111,8 @@ materialize a fresh contiguous buffer per result column.
 
 Owns the logical-to-physical planning boundary.
 
-- `LogicalPlan` currently has only `Scan`
-- `plan()` is a direct passthrough to `PhysicalPlan::TableScan`
-
-There are no rewrites, no cost model, and no rule system yet.
+- `plan()` converts a `LogicalPlan` into a `PhysicalPlan` (both from
+  `db-types`); currently a direct passthrough with no rewrites or cost model
 
 ### `db-sql`
 
@@ -228,7 +229,7 @@ For each column:
 
 ## Query Execution
 
-`db_execution::execute()` currently supports `PhysicalPlan::TableScan` only.
+`db_execution::execute()` currently supports `db_types::PhysicalPlan::TableScan` only.
 
 Execution does the following:
 

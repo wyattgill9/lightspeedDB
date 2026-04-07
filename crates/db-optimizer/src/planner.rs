@@ -1,6 +1,4 @@
-use db_execution::physical_plan::PhysicalPlan;
-
-use crate::logical_plan::LogicalPlan;
+use db_types::{LogicalPlan, PhysicalPlan};
 
 /// Convert a logical plan into a physical plan.
 ///

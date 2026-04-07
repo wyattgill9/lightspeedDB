@@ -1,7 +1,8 @@
 use bytemuck::{Pod, Zeroable};
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use db_catalog::Database;
-use db_execution::{execute::execute, output::OutputTable, physical_plan::PhysicalPlan};
+use db_execution::{execute, OutputTable};
+use db_types::PhysicalPlan;
 
 #[repr(C)]
 #[derive(Clone, Copy, Zeroable, Pod)]

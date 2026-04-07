@@ -1,6 +1,6 @@
 use db_catalog::Database;
 
-use crate::physical_plan::PhysicalPlan;
+use db_types::PhysicalPlan;
 use crate::query_result::{QueryResult, ResultColumn};
 
 pub fn execute<'db>(plan: &PhysicalPlan, database: &'db Database) -> QueryResult<'db> {
