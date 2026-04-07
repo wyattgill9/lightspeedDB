@@ -1,24 +1,34 @@
-# Architecture
+# Current Architecture
 
-This repository is a small columnar analytical database engine in Rust 2024.
-The implemented path is an in-memory, single-threaded scan engine with a working
-`SELECT * FROM table` pipeline and a demo CLI.
+This repository is a Rust 2024 workspace for an analytical database prototype.
+Today, the implemented part of the system is the in-memory catalog and columnar
+storage layer. The SQL, optimizer, and execution layers exist, but they are
+mostly placeholders and do not currently read stored data.
+
+## Repo Status
+
+- The workspace default member is `crates/db-cli`.
+- `cargo check` succeeds for the default member set.
+- `cargo run -p db-cli` succeeds and currently prints `QueryResult`.
+- `cargo check --workspace --all-targets` fails because
+  `crates/db-execution/benches/query.rs` still targets an older execution API.
+- There are no `#[test]` tests in the workspace.
 
 ## Workspace
 
-```
+```text
 db/
 ├── crates/
-│   ├── db-types
-│   ├── db-storage
 │   ├── db-catalog
-│   ├── db-execution
-│   ├── db-optimizer
-│   ├── db-sql
 │   ├── db-cli
-│   ├── db-server
+│   ├── db-execution
 │   ├── db-mvcc
+│   ├── db-optimizer
 │   ├── db-scheduler
+│   ├── db-server
+│   ├── db-sql
+│   ├── db-storage
+│   ├── db-types
 │   └── db-wal
 ├── Cargo.toml
 ├── Justfile
@@ -26,152 +36,180 @@ db/
 └── CURRENT_ARCH.md
 ```
 
-`db-cli` is the default workspace member and currently serves as the end-to-end
-demo binary.
+## What Works Today
 
-## Implemented Pipeline
+There are two very different layers in the codebase.
 
-The working query path is:
+### Implemented write/storage path
 
-```
-SQL text
-  -> db-sql::bind()
-  -> db-optimizer::plan()
-  -> db-execution::execute()
-  -> db-execution::output::OutputTable
-  -> ASCII table output
-```
-
-The working write path is:
-
-```
-row-major bytes
+```text
+typed rows
+  -> bytemuck byte cast
   -> db_catalog::Database::insert()
-  -> DBTable write buffer
-  -> DBTable::flush_write_buffer()
-  -> db_storage::TablePartition
-  -> per-column ColumnSegment storage
+  -> db_catalog::DBTable write_buffer
+  -> db_catalog::DBTable::flush_write_buffer()
+  -> db_storage::TablePartition::insert_rows()
+  -> db_storage::ColumnSegment
 ```
 
-Important limitation: reads do not flush pending writes. Callers must flush a
-table explicitly before planning or execution if they want buffered rows to be
-visible. The CLI does this manually.
+This path is real and writes row-major input into in-memory columnar storage.
+
+### Placeholder query path
+
+```text
+SQL text
+  -> db_sql::parse()
+  -> db_sql::translate()
+  -> db_sql::bind()
+  -> db_optimizer::build_plan()
+  -> db_optimizer::optimize()
+  -> db_execution::physical_plan()
+  -> db_execution::execute()
+  -> db_types::QueryResult
+```
+
+Only `db_sql::parse()` does meaningful work today. It uses `sqlparser`,
+requires exactly one SQL statement, and returns a wrapper around the parsed AST.
+Everything after that currently returns `Default` placeholder values and ignores
+most or all of its inputs.
+
+As a result, the CLI exercises the crate boundaries, but it does not execute a
+real query over stored table data.
 
 ## Crate Responsibilities
 
 ### `db-types`
 
-Owns the fixed-width type system, schema metadata, and IR plan types.
+Shared schema, datatype, and placeholder plan/result types.
 
 - `DataTypeKind` supports `U64`, `U32`, `U8`, `I64`, `I32`, `I8`, `F32`,
-  `F64`, and `BOOL`
-- `ColumnDefinition` stores column name, type, and cached width
-- `TableSchema` stores ordered columns and precomputed `row_size_bytes`
-- `LogicalPlan` is the output of the SQL binder; currently has only `Scan`
-- `PhysicalPlan` is the input to the execution engine; currently has only
-  `TableScan`
-
-Type parsing is case-insensitive. Display formatting is little-endian and
-formats floats with 6 decimal places.
+  `F64`, and `BOOL`.
+- `ColumnDefinition` stores column name, type, and a cached width.
+- `TableSchema` stores ordered columns and precomputes `row_size_bytes`.
+- `UnresolvedPlan` and `ResolvedPlan` are empty structs.
+- `LogicalPlan` currently has only `LogicalPlan::None`.
+- `PhysicalPlan` currently has only `PhysicalPlan::None`.
+- `QueryResult` is currently an empty struct.
+- `OutputTable` lives in this crate, not `db-execution`; it wraps a `String`
+  and `from_query_result()` currently returns an empty output string.
 
 ### `db-storage`
 
-Owns the physical in-memory column storage.
+Implemented in-memory columnar storage primitives.
 
-- `TablePartition` is the row-group container
-- `ColumnSegment` stores one dense byte vector per column
-- `ZoneMap` tracks per-segment min/max bytes
-- `varlen.rs` exists but is not compiled or integrated
-
-The crate exposes `TablePartition` as the row-group container type.
+- `TablePartition` owns one `ColumnSegment` per schema column plus `row_count`.
+- `TablePartition::insert_rows()` transposes tightly packed row-major input into
+  column-major segment buffers.
+- `ColumnSegment` stores:
+  - dense `Vec<u8>` column data
+  - source column index
+  - `ZoneMap`
+  - optional Bloom filter
+  - HyperLogLog cardinality estimator
+- `ZoneMap` stores fixed-width min/max bytes for supported primitive types.
+- `varlen.rs` contains an unfinished arena-backed string sketch, but it is not
+  compiled because `pub mod varlen;` is commented out in `lib.rs`.
 
 ### `db-catalog`
 
-Owns table lifecycle and buffered inserts.
+Implemented in-memory catalog and table lifecycle layer.
 
-- `Database` maps table names to `DBTable`
-- `DBTable` owns schema, partitions, a write buffer, and placeholder stats
-- `TableStatistics` is currently an empty struct
+- `Database` stores tables in a
+  `HashMap<String, DBTable, rapidhash::fast::RandomState>`.
+- `create_table_with_schema()` assigns table ids from the current table count.
+- `create_table()` builds a schema from `(&str, &str)` field pairs.
+- `insert()` appends bytes into a table-local write buffer.
+- `flush_table_writes()` drains the write buffer into partitions.
+- `table()` / `table_mut()` panic if the table does not exist.
+- `get_table()` is the only non-panicking lookup path.
 
-Table names are unique. Table ids are assigned from the current table count and
-panic if the count would exceed `u32::MAX`.
+`DBTable` owns:
 
-### `db-execution`
+- `meta: TableMeta { name, id }`
+- `schema: TableSchema`
+- `table_partitions: Vec<TablePartition>`
+- `stats: TableStatistics`
+- `write_buffer: Vec<u8>`
 
-Owns physical plan execution and text output formatting.
-
-- `execute()` accepts a `PhysicalPlan` (from `db-types`) and walks table
-  partitions to build a `QueryResult`
-- `OutputTable` renders the result as an ASCII grid
-
-`QueryResult` is chunked and zero-copy over stored partition data. It does not
-materialize a fresh contiguous buffer per result column.
-
-### `db-optimizer`
-
-Owns the logical-to-physical planning boundary.
-
-- `plan()` converts a `LogicalPlan` into a `PhysicalPlan` (both from
-  `db-types`); currently a direct passthrough with no rewrites or cost model
+`TableStatistics` currently exists but has no fields.
 
 ### `db-sql`
 
-Owns SQL parsing and binding with `sqlparser`.
+Parser front-end plus placeholder translation/binding.
 
-Current binder behavior:
+- `parse(sql)` uses `sqlparser::parser::Parser::parse_sql`.
+- `parse(sql)` panics on parse failure or if the input contains anything other
+  than exactly one SQL statement.
+- `translate()` ignores the parsed AST and returns `UnresolvedPlan::default()`.
+- `bind()` ignores both the unresolved plan and the catalog and returns
+  `ResolvedPlan::default()`.
 
-- exactly one statement
-- statement must be a query
-- query body must be a simple `SELECT`
-- exactly one table in `FROM`
-- no joins
-- projection must be `SELECT *`
+This means the crate currently validates syntax and statement count, but it
+does not yet produce a semantic representation of the query.
 
-Binding resolves the table name against the catalog and returns all column
-indices for the table schema.
+### `db-optimizer`
+
+Planner/optimizer boundary is present, but behavior is placeholder-only.
+
+- `build_plan()` ignores `ResolvedPlan` and returns `LogicalPlan::default()`.
+- `optimize()` ignores the incoming logical plan and returns
+  `LogicalPlan::default()`.
+
+### `db-execution`
+
+Physical planning and execution APIs exist, but they do not use storage.
+
+- `physical_plan()` ignores `LogicalPlan` and returns `PhysicalPlan::default()`.
+- `execute()` ignores both the physical plan and the `Database`, and returns
+  `QueryResult::default()`.
+
+There is no implemented scan, projection, predicate evaluation, aggregation, or
+result materialization path in this crate right now.
 
 ### `db-cli`
 
-Contains the current executable demo.
-
-It:
+The current demo binary wires the crates together:
 
 1. defines a local `Vec3` row type
 2. creates an in-memory `vec3` table
 3. inserts four rows
-4. flushes the write buffer
-5. runs `SELECT * FROM vec3`
-6. prints the formatted output
+4. flushes the table write buffer
+5. runs the placeholder SQL pipeline on `SELECT col1 FROM vec3`
+6. prints the `Debug` form of the returned `QueryResult`
 
-The binary only runs on 64-bit targets. On 32-bit targets it prints a message
-and exits.
+Because execution is stubbed, the printed output is currently just:
+
+```text
+QueryResult
+```
+
+The binary's `main()` is compiled only on 64-bit targets. There is no 32-bit
+fallback `main()`.
 
 ### `db-server`
 
-This crate is only a stub.
+Networking scaffold only.
 
-- contains a private `run_server_main()` async function
-- creates and binds a TCP socket on `0.0.0.0:8080`
-- converts it into a Tokio `TcpListener`
-- awaits a single accepted connection
-
-There is no public entrypoint, no protocol, and no integration with the
-database crates.
+- The crate exposes no public entrypoint.
+- It contains a private `run_server_main()` async function.
+- That function binds `0.0.0.0:8080`, converts the socket into a Tokio
+  `TcpListener`, and accepts one connection.
+- There is no protocol handling and no integration with the database crates.
 
 ### `db-mvcc`, `db-scheduler`, `db-wal`
 
-These crates have manifests but empty `lib.rs` files. They are scaffolding only.
+These crates have manifests and dependency edges, but their `lib.rs` files are
+empty.
 
-## Data Model
+## Storage Model
 
-The engine ingests tightly packed row-major bytes and stores them in
-column-major partitions.
+The storage layer is columnar after flush, but ingestion is row-major bytes.
 
-```
+```text
 Database
 └── HashMap<String, DBTable, rapidhash::fast::RandomState>
     └── DBTable
-        ├── meta: TableMeta { name, id }
+        ├── meta: TableMeta
         ├── schema: TableSchema
         ├── table_partitions: Vec<TablePartition>
         ├── stats: TableStatistics
@@ -180,145 +218,87 @@ Database
 
 ### Write Buffer
 
-- insert input must be a multiple of `schema.row_size_bytes()`
-- rows accumulate in `write_buffer`
-- the buffer auto-flushes once it reaches 4,096 rows worth of bytes
+- Input to `DBTable::insert()` must be a multiple of `schema.row_size_bytes()`.
+- Rows accumulate in `write_buffer`.
+- The buffer auto-flushes once it reaches `4096 * row_size_bytes()` bytes.
 - `flush_write_buffer()` swaps the buffer out, writes it into partitions, then
-  restores the allocation for reuse
+  restores the cleared allocation for reuse.
 
 ### Partitions
 
-Each `TablePartition` holds:
-
-- `columns: Vec<ColumnSegment>`
-- `row_count: usize`
-
-Capacity is fixed at `64 * 2048 = 131_072` rows per partition.
-
-When a flush would overflow the current partition, `DBTable` allocates a new
-partition and continues writing the remaining rows.
+- Each `TablePartition` starts with one `ColumnSegment` per schema column.
+- Partition capacity is fixed at `64 * 2048 = 131_072` rows.
+- When the current partition is full, `DBTable` allocates a new partition and
+  continues writing remaining rows.
 
 ### Column Segments
 
-Each `ColumnSegment` stores:
+Each `ColumnSegment` is append-only today.
 
-- `data: Vec<u8>`
-- `column_def_index: usize`
-- `zone_map: ZoneMap`
-- `bloom: Option<BloomFilter<rapidhash::quality::RandomState>>`
-- `hll: CardinalityEstimator<[u8], rapidhash::quality::RapidHasher<'static>>`
+For every inserted value it:
 
-Every inserted value:
-
-- appends bytes to the dense column buffer
+- appends raw bytes to the dense column buffer
 - updates the Bloom filter when present
 - updates the HyperLogLog estimator
-- updates the zone map using the column data type
+- updates the zone map using the column datatype
 
-### Column-Major Transposition
-
-`TablePartition::insert_rows()` transposes row-major input into column-major
-storage by iterating columns outermost and rows innermost.
-
-For each column:
-
-1. compute that column's byte range inside each row
-2. reserve space for `row_count * column_width`
-3. walk the incoming rows with `chunks_exact(row_byte_width)`
-4. append the per-row slice for that column into the target segment
-
-## Query Execution
-
-`db_execution::execute()` currently supports `db_types::PhysicalPlan::TableScan` only.
-
-Execution does the following:
-
-1. fetch the table from the catalog
-2. build one `ResultColumn` per requested column
-3. iterate all stored partitions
-4. skip empty partitions
-5. push a borrowed chunk for each selected column segment
-6. accumulate the total row count
-
-`ResultColumn::row_bytes()` resolves a row by walking chunk boundaries and then
-slicing the borrowed segment data.
-
-`OutputTable::from_query_result()` materializes display strings row by row and
-computes max widths from both headers and formatted cells before rendering the
-ASCII table.
-
-## Storage and Query Semantics
-
-These properties follow from the current code:
-
-- data is in-memory only
-- all supported column types are fixed-width
-- inserts and most bind errors panic instead of returning typed errors
-- queries scan every stored partition; zone maps and Bloom filters are populated
-  but not consulted by execution
-- only flushed rows are visible to reads
-- only full-table scans are supported through `SELECT *`
-- there is no delete, update, filter, aggregation, join, or persistence path
-
-## Concurrency Model
-
-The implemented engine is single-threaded and mutation is driven by `&mut self`.
-There is no `Arc`, `Mutex`, lock-free structure, or background worker in the
-core data path.
-
-Returned query results borrow from the database, so execution is read-only for
-the lifetime of the result.
+The storage crate builds metadata on write, but none of that metadata is
+consulted by the current query path.
 
 ## Dependency Shape
 
-The workspace dependency chain is:
+The actual crate graph is not a single straight pipeline. The important edges
+are:
 
-```
+```text
 db-types
   -> db-storage
   -> db-catalog
-  -> db-execution
-  -> db-optimizer
-  -> db-sql
-  -> db-cli
+
+db-sql -> { db-types, db-catalog }
+db-execution -> { db-types, db-storage, db-catalog }
+db-optimizer -> { db-types, db-catalog, db-execution }
+db-cli -> {
+  db-types,
+  db-storage,
+  db-catalog,
+  db-sql,
+  db-optimizer,
+  db-execution
+}
+
+db-mvcc -> { db-types, db-storage }
+db-scheduler -> { db-types, db-execution }
+db-wal -> { db-types, db-storage }
+db-server -> { tokio, socket2 }
 ```
 
-Additional crate dependencies:
+## Build and Benchmark Notes
 
-- `db-server` depends only on `tokio` and `socket2`
-- `db-mvcc` depends on `db-types` and `db-storage`
-- `db-scheduler` depends on `db-types` and `db-execution`
-- `db-wal` depends on `db-types` and `db-storage`
-
-Key third-party libraries in active use:
-
-- `sqlparser` for SQL parsing
-- `bytemuck` for typed byte reads in zone maps and demo row casting
-- `rapidhash` for the catalog hash map and storage metadata structures
-- `fastbloom` for per-segment Bloom filters
-- `cardinality-estimator` for per-segment distinct-count estimation
-- `criterion` for insert and query benchmarks
-
-## Benchmarks
-
-The repository includes two Criterion benchmark targets:
-
-- `crates/db-catalog/benches/insert.rs`
-  - `vec3_one_at_a_time`
-  - `vec3_bulk`
-- `crates/db-execution/benches/query.rs`
-  - `execute`
-  - `execute_with_output`
-
-Both benchmark paths operate on a simple three-column `f32` table.
+- `Justfile` defines `build`, `run`, `bench`, `check`, `test`, and `fmt`
+  shortcuts.
+- `crates/db-catalog/benches/insert.rs` matches the current storage/catalog
+  APIs and builds.
+- `crates/db-execution/benches/query.rs` is stale and does not build against
+  the current code. It still expects:
+  - `db_execution::OutputTable`
+  - `PhysicalPlan::TableScan`
+  - an `execute(&plan, &db)` signature
+- The top-level `build.rs` requires a 64-bit target, but the workspace root is
+  not a package, so that `build.rs` is currently inactive.
 
 ## Current Gaps
 
-The largest gaps between the current codebase and a full database engine are:
+The largest gaps between the current repository and a functioning database
+engine are:
 
-- no durable storage or WAL integration
-- no MVCC or scheduler implementation
-- no typed error model
-- no server entrypoint or wire protocol
-- no predicate pushdown or index usage despite stored metadata
-- no variable-length type support in the compiled engine
+- no durable storage
+- no WAL integration
+- no MVCC implementation
+- no scheduler implementation
+- no real SQL translation or binding
+- no logical or physical planning beyond placeholder enums
+- no execution engine over stored partitions
+- no typed error model; most failure paths panic
+- no query tests
+- one stale benchmark that keeps `--workspace --all-targets` from passing
