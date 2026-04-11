@@ -1,8 +1,8 @@
 use bytemuck::{Pod, Zeroable};
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use db_catalog::Database;
-use db_execution::{execute, OutputTable};
-use db_types::PhysicalPlan;
+use db_execution::execute;
+use db_types::{PhysicalPlan, OutputTable};
 
 #[repr(C)]
 #[derive(Clone, Copy, Zeroable, Pod)]
@@ -32,10 +32,7 @@ fn loaded_database() -> Database {
 }
 
 fn scan_plan() -> PhysicalPlan {
-    PhysicalPlan::TableScan {
-        table_name: TABLE_NAME.to_owned(),
-        column_indices: vec![0, 1, 2],
-    }
+    PhysicalPlan::default()
 }
 
 fn bench_query(c: &mut Criterion) {
@@ -47,11 +44,11 @@ fn bench_query(c: &mut Criterion) {
     group.sample_size(20);
 
     group.bench_function("execute", |b| {
-        b.iter(|| execute(&plan, &db));
+        b.iter(|| execute(plan.clone(), &db));
     });
 
     group.bench_function("execute_with_output", |b| {
-        b.iter(|| OutputTable::from_query_result(&execute(&plan, &db)));
+        b.iter(|| OutputTable::from_query_result(&execute(plan.clone(), &db)));
     });
 
     group.finish();

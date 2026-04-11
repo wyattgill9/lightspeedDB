@@ -1,8 +1,18 @@
 #[derive(Default)]
-pub struct UnresolvedPlan {}
+pub enum UnresolvedPlan {
+    Select {
+        columns: Vec<String>,
+    },
+
+    #[default]
+    None,
+}
 
 #[derive(Default)]
-pub struct ResolvedPlan {}
+pub enum ResolvedPlan {
+    #[default]
+    None,
+}
 
 #[derive(Default)]
 pub enum LogicalPlan {
@@ -10,7 +20,7 @@ pub enum LogicalPlan {
     None,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub enum PhysicalPlan {
     #[default]
     None,

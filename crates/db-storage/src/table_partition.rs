@@ -20,7 +20,7 @@ impl TablePartition {
         }
     }
 
-    /// Insert tightly-packed array-of-structs byte data.
+    /// Insert tightly-packed AoS byte data.
     ///
     /// Caller must pre-validate: `bytes.len()` is a multiple of
     /// `schema.row_byte_width()`, and the row count does not exceed
@@ -29,29 +29,21 @@ impl TablePartition {
         let row_byte_width = schema.row_size_bytes();
         let row_count = bytes.len() / row_byte_width;
 
-        if row_count > self.rows_available() {
-            panic!(
-                "table partition overflow: {} rows requested, {} available",
-                row_count,
-                self.rows_available()
-            );
-        } else {
-            // Column-major transposition: iterate columns outer, rows
-            // inner. Each column buffer stays hot in cache for its
-            // entire fill.
-            let mut col_byte_start = 0usize;
-            for (col_index, col_def) in schema.columns().iter().enumerate() {
-                let col_byte_width = col_def.byte_width();
-                let col_byte_end = col_byte_start + col_byte_width;
-                let col = &mut self.columns[col_index];
-                col.reserve(row_count * col_byte_width);
-                for row_bytes in bytes.chunks_exact(row_byte_width) {
-                    col.push_dtype_val(&row_bytes[col_byte_start..col_byte_end], schema);
-                }
-                col_byte_start = col_byte_end;
+        // Column-major transposition: iterate columns outer, rows
+        // inner. Each column buffer stays hot in cache for its
+        // entire fill.
+        let mut col_byte_start = 0usize;
+        for (col_index, col_def) in schema.columns().iter().enumerate() {
+            let col_byte_width = col_def.byte_width();
+            let col_byte_end = col_byte_start + col_byte_width;
+            let col = &mut self.columns[col_index];
+            col.reserve(row_count * col_byte_width);
+            for row_bytes in bytes.chunks_exact(row_byte_width) {
+                col.push_dtype_val(&row_bytes[col_byte_start..col_byte_end], schema);
             }
-            self.row_count += row_count;
+            col_byte_start = col_byte_end;
         }
+        self.row_count += row_count;
     }
 
     pub fn columns(&self) -> &[ColumnSegment] {

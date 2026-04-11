@@ -34,18 +34,17 @@ fn main() {
     db.insert("vec3", point_bytes);
     db.flush_table_writes("vec3");
 
-    let output = run_sql_query("SELECT col1 FROM vec3", &db);
-
-    println!("{:?}", output);
+    let query_result = run_sql_query("SELECT col1 FROM vec3", &db);
+    println!("{:?}", query_result);
 }
 
 fn run_sql_query(sql: &str, db: &Database) -> QueryResult {
-    let parsed     = db_sql::parse(sql);
-    let unresolved = db_sql::translate(parsed);
-    let resolved   = db_sql::bind(unresolved, &db);
-    let logical    = db_optimizer::build_plan(resolved);
-    let optimized  = db_optimizer::optimize(logical);
-    let physical   = db_execution::physical_plan(optimized);
+    let parsed_query    = db_sql::parse(sql);
+    let unresolved_plan = db_sql::translate(parsed_query);
+    let resolved_plan   = db_sql::bind(unresolved_plan, &db);
+    let logical_plan    = db_optimizer::build_plan(resolved_plan);
+    let optimized_plan  = db_optimizer::optimize(logical_plan);
+    let physical_plan   = db_execution::physical_plan(optimized_plan);
 
-    db_execution::execute(physical, &db)
+    db_execution::execute(physical_plan, &db)
 }

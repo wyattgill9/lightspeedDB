@@ -275,7 +275,6 @@ name = "db-optimizer"
 version = "0.1.0"
 dependencies = [
  "db-catalog",
- "db-execution",
  "db-types",
 ]
 

@@ -9,4 +9,3 @@ authors     = ["Wyatt Gill <wyattgill01@outlook.com>"]
 [dependencies]
 db-types     = { path = "../db-types" }
 db-catalog   = { path = "../db-catalog" }
-db-execution = { path = "../db-execution" }
