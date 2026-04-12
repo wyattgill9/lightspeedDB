@@ -1,9 +1,9 @@
 # Current Architecture
 
 This repository is a Rust 2024 workspace for an analytical database prototype.
-The implemented layers are: in-memory columnar storage, catalog, SQL front-end
-(parse, translate, bind), and logical query planning (build_plan, optimize). The
-execution layer is stubbed.
+The implemented layers are: in-memory columnar storage, catalog, and SQL front-end
+(parse, translate, bind). Logical planning, physical planning, and execution are
+all stubs.
 
 ## Repo Status
 
@@ -12,8 +12,8 @@ execution layer is stubbed.
   warnings in `db-server` (unused function), `db-catalog` bench (digit
   grouping), and `db-execution` bench (clone on copy).
 - `cargo nextest run --workspace` passes with 5 tests (all in `db-sql`).
-- `cargo run -p db-cli` creates a table, runs the full SQL pipeline through
-  logical planning, and prints the `LogicalPlan`.
+- `cargo run -p db-cli` creates a table, runs SQL through parse → translate →
+  bind, and prints the `ResolvedPlan`. Logical planning is commented out.
 - There is no external error handling crate. All error paths use `panic!`.
 
 ## Workspace
@@ -58,12 +58,10 @@ This path is real and writes row-major input into in-memory columnar storage.
 
 ```text
 SQL text
-  -> db_sql::parse()             -- sqlparser wrapper, validates single statement
-  -> db_sql::translate()         -- AST -> UnresolvedPlan (SELECT only)
-  -> db_sql::bind()              -- resolves tables/columns/functions against catalog
-  -> db_optimizer::build_plan()  -- ResolvedPlan -> LogicalPlan (relational algebra tree)
-  -> db_optimizer::optimize()    -- pass-through (no optimizations yet)
-  -> LogicalPlan
+  -> db_sql::parse()      -- sqlparser wrapper, validates single statement
+  -> db_sql::translate()  -- AST -> UnresolvedPlan (SELECT only)
+  -> db_sql::bind()       -- resolves tables/columns/functions against catalog
+  -> ResolvedPlan
 ```
 
 `parse()` wraps `sqlparser` and requires exactly one statement.
@@ -78,25 +76,20 @@ aggregate semantics (GROUP BY rules, type checking for `avg`), and produces a
 `ResolvedPlan` with typed aggregate function variants, resolved column indices,
 and types. Supported functions: `count(*)`, `count(column)`, `avg(column)`.
 
-`build_plan()` converts a `ResolvedPlan` into a `LogicalPlan` relational algebra
-tree. It performs column scan pruning (only referenced columns are included in
-the `TableScan`), remaps column indices from table-level to scan-level positions,
-and produces trees of at most 3 levels: `Projection -> Aggregate -> TableScan`
-or `Projection -> TableScan`.
+The pipeline stops at `ResolvedPlan`. The `build_plan` and `optimize` calls in
+`db-cli` are commented out.
 
-`optimize()` is a pass-through that returns the plan unchanged. This is the
-hook for future optimization passes.
-
-### Stub execution path
+### Stub planning and execution path
 
 ```text
-LogicalPlan
-  -> db_execution::physical_plan()  -- returns PhysicalPlan::None
-  -> db_execution::execute()        -- returns QueryResult::default()
+ResolvedPlan
+  -> db_optimizer::build_plan()   -- ignores input, returns LogicalPlan::None
+  -> db_optimizer::optimize()     -- pass-through
+  -> db_execution::physical_plan() -- returns PhysicalPlan::None
+  -> db_execution::execute()       -- returns QueryResult::default()
 ```
 
-Physical planning and execution are no-op stubs. `PhysicalPlan` has only a
-`None` variant. `QueryResult` is an empty struct.
+All four steps are no-op stubs.
 
 ## Crate Responsibilities
 
@@ -125,25 +118,9 @@ Plan types form a staged pipeline with four distinct representations:
   (`CountStar`, `Count { column }`, `Avg { column }`) and a `data_type`.
   No stringly-typed function dispatch.
 
-- `LogicalPlan` — relational algebra tree with three node types:
-  - `TableScan { table_id, table_name, columns: Vec<ScanColumn> }` — leaf
-    node that reads specific columns from a table.
-  - `Projection { expressions: Vec<ProjectionExpr>, input }` — selects,
-    reorders, and aliases columns from its input.
-  - `Aggregate { group_keys: Vec<ColumnRef>, aggregates: Vec<AggregateExpr>, input }`
-    — groups rows by key columns and computes aggregate functions.
+- `LogicalPlan` — enum with only a `None` variant (stub).
 
-  Column references use positional indices (`ColumnRef { index: usize }`) into
-  the child node's output schema. `output_columns()` iteratively computes the
-  output schema by walking the plan chain bottom-up, bounded by
-  `PLAN_DEPTH_LIMIT = 4`. No recursion.
-
-  Supporting types: `AggregateExpr` wraps an `AggregateFunction` enum
-  (`CountStar`, `Count { input }`, `Avg { input }`). `ScanColumn` carries
-  name, `table_index`, and `data_type`. `OutputColumn` carries name and
-  `data_type`.
-
-- `PhysicalPlan` — enum with only `None` variant (stub).
+- `PhysicalPlan` — enum with only a `None` variant (stub).
 
 - `QueryResult` is an empty struct (placeholder).
 - `OutputTable` wraps a `String`; `from_query_result()` returns an empty
@@ -165,7 +142,7 @@ Implemented in-memory columnar storage primitives.
   - HyperLogLog cardinality estimator
 - `ZoneMap` stores fixed-width min/max bytes for supported primitive types.
 - `varlen.rs` contains an unfinished arena-backed string sketch. The module is
-  now compiled but all functions are `todo!()`.
+  compiled but all functions are `todo!()`.
 
 ### `db-catalog`
 
@@ -210,18 +187,11 @@ SQL front-end with real parsing, translation, and binding.
 
 ### `db-optimizer`
 
-Logical plan construction and optimization.
+Stub logical plan construction and optimization.
 
-- `build_plan(ResolvedPlan) -> LogicalPlan` converts a resolved plan into a
-  relational algebra tree. Key behaviors:
-  - Column scan pruning: `collect_referenced_indices` gathers only columns
-    referenced in projection and GROUP BY; `TableScan` omits unreferenced
-    columns.
-  - Index remapping: `remap_to_scan_index` translates table-level column
-    indices to scan-level positions.
-  - Aggregate queries produce `Projection -> Aggregate -> TableScan`.
-  - Simple queries produce `Projection -> TableScan`.
-  - Typed `AggregateFunction` variants replace string-based function dispatch.
+- `build_plan(ResolvedPlan) -> LogicalPlan` ignores its input and returns
+  `LogicalPlan::None`. The full implementation was written and then removed;
+  this is the re-stub state ahead of the next iteration.
 - `optimize(LogicalPlan) -> LogicalPlan` is a pass-through. This is the
   insertion point for future optimization passes (predicate pushdown, join
   reordering, etc.).
@@ -244,13 +214,12 @@ The current demo binary wires the crates together:
 
 1. creates a `trips` table with columns `(cab_type: u8, passenger_count: u8,
    total_amount: f64)`
-2. parses `SELECT passenger_count, avg(total_amount) FROM trips GROUP BY
-   passenger_count`
-3. runs the full pipeline: parse -> translate -> bind -> build_plan -> optimize
-4. prints the `Debug` form of the `LogicalPlan`
+2. runs `SELECT passenger_count, avg(total_amount) FROM trips GROUP BY
+   passenger_count` through parse → translate → bind
+3. prints the `Debug` form of the `ResolvedPlan`
 
-The binary demonstrates the SQL front-end and logical planning pipeline. The
-execution layer is not invoked.
+The `build_plan` / `optimize` calls are commented out. The execution layer is
+not invoked.
 
 The binary's `main()` is compiled only on 64-bit targets.
 
@@ -357,7 +326,8 @@ engine are:
 - no WAL integration
 - no MVCC implementation
 - no scheduler implementation
-- no physical planning (PhysicalPlan is a placeholder enum with only `None`)
+- no logical planning (LogicalPlan is a stub enum with only `None`)
+- no physical planning (PhysicalPlan is a stub enum with only `None`)
 - no execution engine over stored partitions
 - no typed error model; all failure paths panic
 - SQL support limited to SELECT with GROUP BY (no WHERE, ORDER BY, LIMIT, JOIN)
