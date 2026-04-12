@@ -12,6 +12,8 @@ impl std::fmt::Display for OutputTable {
 
 impl OutputTable {
     pub fn from_query_result(_query_result: &QueryResult) -> Self {
-        Self { output:  "".to_string() }
+        Self {
+            output: "".to_string(),
+        }
     }
 }

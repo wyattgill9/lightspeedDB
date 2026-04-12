@@ -2,7 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use db_catalog::Database;
 use db_execution::execute;
-use db_types::{PhysicalPlan, OutputTable};
+use db_types::{OutputTable, PhysicalPlan};
 
 #[repr(C)]
 #[derive(Clone, Copy, Zeroable, Pod)]
@@ -22,7 +22,11 @@ fn loaded_database() -> Database {
     let points: Vec<Vec3> = (0..ROW_COUNT)
         .map(|i| {
             let t = i as f32;
-            Vec3 { x: t, y: t * 2.0, z: t * 3.0 }
+            Vec3 {
+                x: t,
+                y: t * 2.0,
+                z: t * 3.0,
+            }
         })
         .collect();
 

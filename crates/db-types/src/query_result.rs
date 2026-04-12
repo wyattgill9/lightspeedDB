@@ -1,4 +1,2 @@
 #[derive(Debug, Default)]
-pub struct QueryResult {
-
-}
+pub struct QueryResult {}

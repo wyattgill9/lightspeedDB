@@ -105,8 +105,8 @@ impl DBTable {
                 .last_mut()
                 .expect("table partition exists");
 
-            let row_count_chunk = (row_count_total - row_count_done)
-                .min(table_partition.rows_available());
+            let row_count_chunk =
+                (row_count_total - row_count_done).min(table_partition.rows_available());
             let byte_start = row_count_done * row_byte_width;
             let byte_end = byte_start + row_count_chunk * row_byte_width;
             table_partition.insert_rows(schema, &bytes[byte_start..byte_end]);

@@ -1,10 +1,5 @@
-use db_catalog::Database;
-use db_types::{LogicalPlan, PhysicalPlan, QueryResult};
+mod execute;
+mod physical_plan;
 
-pub fn physical_plan(_lplan: LogicalPlan) -> PhysicalPlan {
-    PhysicalPlan::default()
-}
-
-pub fn execute(_pplan: PhysicalPlan, _database: &Database) -> QueryResult {
-    QueryResult::default()
-}
+pub use crate::execute::execute;
+pub use crate::physical_plan::physical_plan;

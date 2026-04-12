@@ -1,9 +1,5 @@
-use db_types::{LogicalPlan, ResolvedPlan};
+mod build_plan;
+mod optimize;
 
-pub fn build_plan(_rplan: ResolvedPlan) -> LogicalPlan {
-    LogicalPlan::default()
-}
-
-pub fn optimize(_lplan: LogicalPlan) -> LogicalPlan {
-    LogicalPlan::default()
-}
+pub use crate::build_plan::build_plan;
+pub use crate::optimize::optimize;
