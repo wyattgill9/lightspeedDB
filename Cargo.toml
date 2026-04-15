@@ -1,34 +1,21 @@
 [workspace]
-members = [
-    "crates/db-catalog",
-    "crates/db-cli",
-    "crates/db-execution",
-    "crates/db-mvcc",
-    "crates/db-optimizer",
-    "crates/db-scheduler",
-    "crates/db-server",
-    "crates/db-sql",
-    "crates/db-storage",
-    "crates/db-types",
-    "crates/db-wal",
-]
-
-default-members  = ["crates/db-cli"]
-resolver         = "2"
+resolver = "3"
+members = ["crates/*"]
+default-members = ["crates/lsdb-cli"]
 
 [workspace.dependencies]
-# db-storage
+# lsdb-storage
 cardinality-estimator = "1"
 fastbloom = "0.17.0"
 
-# db-server
-tokio     = { version = "1.50.0", features = ["full"] }
-socket2   = "0.6"
+# lsdb-server
+socket2 = "0.6"
+tokio = { version = "1.50.0", features = ["full"] }
 
-# db-sql
+# lsdb-sql
 sqlparser = "0.61.0"
 
 # util
-bytemuck  = { version = "1.25", features = ["derive"] }
-rapidhash = "4.4.1"
+bytemuck = { version = "1.25", features = ["derive"] }
 criterion = { version = "0.5", features = ["html_reports"] }
+rapidhash = "4.4.1"

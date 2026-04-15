@@ -228,105 +228,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
-name = "db-catalog"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "criterion",
- "db-storage",
- "db-types",
- "rapidhash",
-]
-
-[[package]]
-name = "db-cli"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "db-catalog",
- "db-execution",
- "db-optimizer",
- "db-sql",
- "db-storage",
- "db-types",
-]
-
-[[package]]
-name = "db-execution"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "criterion",
- "db-catalog",
- "db-storage",
- "db-types",
-]
-
-[[package]]
-name = "db-mvcc"
-version = "0.1.0"
-dependencies = [
- "db-storage",
- "db-types",
-]
-
-[[package]]
-name = "db-optimizer"
-version = "0.1.0"
-dependencies = [
- "db-catalog",
- "db-types",
-]
-
-[[package]]
-name = "db-scheduler"
-version = "0.1.0"
-dependencies = [
- "db-execution",
- "db-types",
-]
-
-[[package]]
-name = "db-server"
-version = "0.1.0"
-dependencies = [
- "socket2",
- "tokio",
-]
-
-[[package]]
-name = "db-sql"
-version = "0.1.0"
-dependencies = [
- "db-catalog",
- "db-types",
- "sqlparser",
-]
-
-[[package]]
-name = "db-storage"
-version = "0.1.0"
-dependencies = [
- "bytemuck",
- "cardinality-estimator",
- "db-types",
- "fastbloom",
- "rapidhash",
-]
-
-[[package]]
-name = "db-types"
-version = "0.1.0"
-
-[[package]]
-name = "db-wal"
-version = "0.1.0"
-dependencies = [
- "db-storage",
- "db-types",
-]
-
-[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -470,6 +371,105 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+
+[[package]]
+name = "lsdb-catalog"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "criterion",
+ "lsdb-storage",
+ "lsdb-types",
+ "rapidhash",
+]
+
+[[package]]
+name = "lsdb-cli"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "lsdb-catalog",
+ "lsdb-execution",
+ "lsdb-optimizer",
+ "lsdb-sql",
+ "lsdb-storage",
+ "lsdb-types",
+]
+
+[[package]]
+name = "lsdb-execution"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "criterion",
+ "lsdb-catalog",
+ "lsdb-storage",
+ "lsdb-types",
+]
+
+[[package]]
+name = "lsdb-mvcc"
+version = "0.1.0"
+dependencies = [
+ "lsdb-storage",
+ "lsdb-types",
+]
+
+[[package]]
+name = "lsdb-optimizer"
+version = "0.1.0"
+dependencies = [
+ "lsdb-catalog",
+ "lsdb-types",
+]
+
+[[package]]
+name = "lsdb-scheduler"
+version = "0.1.0"
+dependencies = [
+ "lsdb-execution",
+ "lsdb-types",
+]
+
+[[package]]
+name = "lsdb-server"
+version = "0.1.0"
+dependencies = [
+ "socket2",
+ "tokio",
+]
+
+[[package]]
+name = "lsdb-sql"
+version = "0.1.0"
+dependencies = [
+ "lsdb-catalog",
+ "lsdb-types",
+ "sqlparser",
+]
+
+[[package]]
+name = "lsdb-storage"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "cardinality-estimator",
+ "fastbloom",
+ "lsdb-types",
+ "rapidhash",
+]
+
+[[package]]
+name = "lsdb-types"
+version = "0.1.0"
+
+[[package]]
+name = "lsdb-wal"
+version = "0.1.0"
+dependencies = [
+ "lsdb-storage",
+ "lsdb-types",
+]
 
 [[package]]
 name = "memchr"

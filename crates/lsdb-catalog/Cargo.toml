@@ -1,0 +1,20 @@
+[package]
+name = "lsdb-catalog"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/wyattgill9/db"
+authors = ["Wyatt Gill <wyattgill01@outlook.com>"]
+
+[[bench]]
+harness = false
+name = "insert"
+
+[dependencies]
+lsdb-storage = { path = "../lsdb-storage" }
+lsdb-types = { path = "../lsdb-types" }
+rapidhash = { workspace = true }
+
+[dev-dependencies]
+bytemuck = { workspace = true }
+criterion = { workspace = true }

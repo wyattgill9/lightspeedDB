@@ -1,0 +1,14 @@
+[package]
+name = "lsdb-storage"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/wyattgill9/db"
+authors = ["Wyatt Gill <wyattgill01@outlook.com>"]
+
+[dependencies]
+bytemuck = { workspace = true }
+cardinality-estimator = { workspace = true }
+lsdb-types = { path = "../lsdb-types" }
+fastbloom = { workspace = true }
+rapidhash = { workspace = true }

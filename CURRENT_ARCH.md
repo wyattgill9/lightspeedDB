@@ -1,4 +1,4 @@
-# Current Architecture
+# LightSpeedDB - Current Architecture
 
 This repository is a Rust 2024 workspace for an analytical database prototype.
 The implemented layers are: in-memory columnar storage, catalog, and SQL front-end
@@ -7,31 +7,31 @@ all stubs.
 
 ## Repo Status
 
-- The workspace default member is `crates/db-cli`.
+- The workspace default member is `crates/lsdb-cli`.
 - `cargo clippy --workspace --all-targets` succeeds with only pre-existing
-  warnings in `db-server` (unused function), `db-catalog` bench (digit
-  grouping), and `db-execution` bench (clone on copy).
-- `cargo nextest run --workspace` passes with 5 tests (all in `db-sql`).
-- `cargo run -p db-cli` creates a table, runs SQL through parse → translate →
+  warnings in `lsdb-server` (unused function), `lsdb-catalog` bench (digit
+  grouping), and `lsdb-execution` bench (clone on copy).
+- `cargo nextest run --workspace` passes with 5 tests (all in `lsdb-sql`).
+- `cargo run -p lsdb-cli` creates a table, runs SQL through parse → translate →
   bind, and prints the `ResolvedPlan`. Logical planning is commented out.
 - There is no external error handling crate. All error paths use `panic!`.
 
 ## Workspace
 
 ```text
-db/
+lightspeed-db/
 ├── crates/
-│   ├── db-catalog
-│   ├── db-cli
-│   ├── db-execution
-│   ├── db-mvcc
-│   ├── db-optimizer
-│   ├── db-scheduler
-│   ├── db-server
-│   ├── db-sql
-│   ├── db-storage
-│   ├── db-types
-│   └── db-wal
+│   ├── lsdb-catalog
+│   ├── lsdb-cli
+│   ├── lsdb-execution
+│   ├── lsdb-mvcc
+│   ├── lsdb-optimizer
+│   ├── lsdb-scheduler
+│   ├── lsdb-server
+│   ├── lsdb-sql
+│   ├── lsdb-storage
+│   ├── lsdb-types
+│   └── lsdb-wal
 ├── Cargo.toml
 ├── Justfile
 ├── CLAUDE.md
@@ -45,11 +45,11 @@ db/
 ```text
 typed rows
   -> bytemuck byte cast
-  -> db_catalog::Database::insert()
-  -> db_catalog::DBTable write_buffer
-  -> db_catalog::DBTable::flush_write_buffer()
-  -> db_storage::TablePartition::insert_rows()
-  -> db_storage::ColumnSegment
+  -> lsdb_catalog::Database::insert()
+  -> lsdb_catalog::DBTable write_buffer
+  -> lsdb_catalog::DBTable::flush_write_buffer()
+  -> lsdb_storage::TablePartition::insert_rows()
+  -> lsdb_storage::ColumnSegment
 ```
 
 This path is real and writes row-major input into in-memory columnar storage.
@@ -58,9 +58,9 @@ This path is real and writes row-major input into in-memory columnar storage.
 
 ```text
 SQL text
-  -> db_sql::parse()      -- sqlparser wrapper, validates single statement
-  -> db_sql::translate()  -- AST -> UnresolvedPlan (SELECT only)
-  -> db_sql::bind()       -- resolves tables/columns/functions against catalog
+  -> lsdb_sql::parse()      -- sqlparser wrapper, validates single statement
+  -> lsdb_sql::translate()  -- AST -> UnresolvedPlan (SELECT only)
+  -> lsdb_sql::bind()       -- resolves tables/columns/functions against catalog
   -> ResolvedPlan
 ```
 
@@ -77,23 +77,23 @@ aggregate semantics (GROUP BY rules, type checking for `avg`), and produces a
 and types. Supported functions: `count(*)`, `count(column)`, `avg(column)`.
 
 The pipeline stops at `ResolvedPlan`. The `build_plan` and `optimize` calls in
-`db-cli` are commented out.
+`lsdb-cli` are commented out.
 
 ### Stub planning and execution path
 
 ```text
 ResolvedPlan
-  -> db_optimizer::build_plan()   -- ignores input, returns LogicalPlan::None
-  -> db_optimizer::optimize()     -- pass-through
-  -> db_execution::physical_plan() -- returns PhysicalPlan::None
-  -> db_execution::execute()       -- returns QueryResult::default()
+  -> lsdb_optimizer::build_plan()   -- ignores input, returns LogicalPlan::None
+  -> lsdb_optimizer::optimize()     -- pass-through
+  -> lsdb_execution::physical_plan() -- returns PhysicalPlan::None
+  -> lsdb_execution::execute()       -- returns QueryResult::default()
 ```
 
 All four steps are no-op stubs.
 
 ## Crate Responsibilities
 
-### `db-types`
+### `lsdb-types`
 
 Shared schema, datatype, plan, and result types.
 
@@ -126,7 +126,7 @@ Plan types form a staged pipeline with four distinct representations:
 - `OutputTable` wraps a `String`; `from_query_result()` returns an empty
   output string.
 
-### `db-storage`
+### `lsdb-storage`
 
 Implemented in-memory columnar storage primitives.
 
@@ -144,7 +144,7 @@ Implemented in-memory columnar storage primitives.
 - `varlen.rs` contains an unfinished arena-backed string sketch. The module is
   compiled but all functions are `todo!()`.
 
-### `db-catalog`
+### `lsdb-catalog`
 
 Implemented in-memory catalog and table lifecycle layer.
 
@@ -167,7 +167,7 @@ Implemented in-memory catalog and table lifecycle layer.
 
 `TableStatistics` currently exists but has no fields.
 
-### `db-sql`
+### `lsdb-sql`
 
 SQL front-end with real parsing, translation, and binding.
 
@@ -185,7 +185,7 @@ SQL front-end with real parsing, translation, and binding.
 5 tests cover the parse-translate-bind pipeline for GROUP BY queries with
 `count(*)` and `avg()`, plus a rejection test for `avg` on non-numeric columns.
 
-### `db-optimizer`
+### `lsdb-optimizer`
 
 Stub logical plan construction and optimization.
 
@@ -196,7 +196,7 @@ Stub logical plan construction and optimization.
   insertion point for future optimization passes (predicate pushdown, join
   reordering, etc.).
 
-### `db-execution`
+### `lsdb-execution`
 
 Physical planning and execution APIs exist, but they do not use storage.
 
@@ -208,7 +208,7 @@ The execution benchmark (`benches/query.rs`) loads 100K `Vec3` rows and
 benchmarks `table_scan` execution. It compiles and runs but exercises no real
 execution logic since execution is stubbed.
 
-### `db-cli`
+### `lsdb-cli`
 
 The current demo binary wires the crates together:
 
@@ -223,7 +223,7 @@ not invoked.
 
 The binary's `main()` is compiled only on 64-bit targets.
 
-### `db-server`
+### `lsdb-server`
 
 Networking scaffold only.
 
@@ -232,7 +232,7 @@ Networking scaffold only.
   accepts one connection.
 - No protocol handling and no integration with the database crates.
 
-### `db-mvcc`, `db-scheduler`, `db-wal`
+### `lsdb-mvcc`, `lsdb-scheduler`, `lsdb-wal`
 
 These crates have manifests and dependency edges, but their `lib.rs` files are
 empty.
@@ -284,35 +284,35 @@ consulted by the current query path.
 ## Dependency Shape
 
 ```text
-db-types
-  -> db-storage
-  -> db-catalog
+lsdb-types
+  -> lsdb-storage
+  -> lsdb-catalog
 
-db-sql -> { db-types, db-catalog }
-db-optimizer -> { db-types }
-db-execution -> { db-types, db-storage, db-catalog }
-db-cli -> {
-  db-types,
-  db-storage,
-  db-catalog,
-  db-sql,
-  db-optimizer,
-  db-execution
+lsdb-sql -> { lsdb-types, lsdb-catalog }
+lsdb-optimizer -> { lsdb-types }
+lsdb-execution -> { lsdb-types, lsdb-storage, lsdb-catalog }
+lsdb-cli -> {
+  lsdb-types,
+  lsdb-storage,
+  lsdb-catalog,
+  lsdb-sql,
+  lsdb-optimizer,
+  lsdb-execution
 }
 
-db-mvcc -> { db-types, db-storage }
-db-scheduler -> { db-types, db-execution }
-db-wal -> { db-types, db-storage }
-db-server -> { tokio, socket2 }
+lsdb-mvcc -> { lsdb-types, lsdb-storage }
+lsdb-scheduler -> { lsdb-types, lsdb-execution }
+lsdb-wal -> { lsdb-types, lsdb-storage }
+lsdb-server -> { tokio, socket2 }
 ```
 
 ## Build and Benchmark Notes
 
 - `Justfile` defines `build`, `run`, `bench`, `check`, `test`, and `fmt`
   shortcuts.
-- `crates/db-catalog/benches/insert.rs` matches the current storage/catalog
+- `crates/lsdb-catalog/benches/insert.rs` matches the current storage/catalog
   APIs and builds.
-- `crates/db-execution/benches/query.rs` compiles and runs but exercises no
+- `crates/lsdb-execution/benches/query.rs` compiles and runs but exercises no
   real execution logic since the execution layer is stubbed.
 - The top-level `build.rs` requires a 64-bit target, but the workspace root is
   not a package, so that `build.rs` is currently inactive.
@@ -333,4 +333,4 @@ engine are:
 - SQL support limited to SELECT with GROUP BY (no WHERE, ORDER BY, LIMIT, JOIN)
 - `OutputTable` and `QueryResult` are still placeholders
 - no optimization passes (optimize is a pass-through)
-- 5 tests total, all in `db-sql`
+- 5 tests total, all in `lsdb-sql`
