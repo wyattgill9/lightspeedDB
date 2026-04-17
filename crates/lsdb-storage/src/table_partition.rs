@@ -1,6 +1,6 @@
 use lsdb_types::TableSchema;
 
-use crate::segment::ColumnSegment;
+use crate::ColumnSegment;
 
 const TABLE_PARTITION_CAPACITY: usize = 64 * 2048;
 

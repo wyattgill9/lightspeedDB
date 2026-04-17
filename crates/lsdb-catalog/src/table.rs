@@ -1,7 +1,7 @@
 use lsdb_storage::TablePartition;
 use lsdb_types::TableSchema;
 
-use crate::statistics::TableStatistics;
+use crate::TableStatistics;
 
 const CAPACITY_ROWS_WRITE_BUFFER: usize = 4096;
 
