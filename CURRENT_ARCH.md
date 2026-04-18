@@ -1,25 +1,26 @@
 # LightSpeedDB - Current Architecture
 
-This repository is a Rust 2024 workspace for an analytical database prototype.
-The implemented layers are: in-memory columnar storage, catalog, and SQL front-end
-(parse, translate, bind). Logical planning, physical planning, and execution are
-all stubs.
+Rust 2024 workspace for an analytical database prototype. The implemented
+layers are: in-memory columnar storage with write-time statistics, catalog,
+and a SQL front-end (parse, translate). Binding, logical planning, physical
+planning, and execution are all stubs.
 
 ## Repo Status
 
-- The workspace default member is `crates/lsdb-cli`.
-- `cargo clippy --workspace --all-targets` succeeds with only pre-existing
-  warnings in `lsdb-server` (unused function), `lsdb-catalog` bench (digit
-  grouping), and `lsdb-execution` bench (clone on copy).
-- `cargo nextest run --workspace` passes with 5 tests (all in `lsdb-sql`).
-- `cargo run -p lsdb-cli` creates a table, runs SQL through parse → translate →
-  bind, and prints the `ResolvedPlan`. Logical planning is commented out.
-- There is no external error handling crate. All error paths use `panic!`.
+- Workspace default member is `crates/lsdb-cli`.
+- `cargo clippy --workspace --all-targets` succeeds with one pre-existing
+  warning in `lsdb-server` (unused function).
+- `cargo nextest run --workspace` passes with 2 tests (both in `lsdb-sql`
+  `translate` module).
+- `cargo run -p lsdb-cli` creates a table, runs SQL through parse and
+  translate, and prints the `UnresolvedPlan`. Binding and planning are
+  commented out.
+- No external error handling crate. All error paths use `panic!`.
 
 ## Workspace
 
 ```text
-lightspeed-db/
+lightspeedDB/
 ├── crates/
 │   ├── lsdb-catalog
 │   ├── lsdb-cli
@@ -32,126 +33,119 @@ lightspeed-db/
 │   ├── lsdb-storage
 │   ├── lsdb-types
 │   └── lsdb-wal
-├── Cargo.toml
-├── Justfile
+├── Cargo.toml          (resolver = "3")
+├── justfile
+├── flake.nix / flake.lock
+├── BENCH_SPECS.md
 ├── CLAUDE.md
 └── CURRENT_ARCH.md
 ```
 
 ## What Works Today
 
-### Implemented write/storage path
+### Implemented write path
 
 ```text
 typed rows
-  -> bytemuck byte cast
-  -> lsdb_catalog::Database::insert()
-  -> lsdb_catalog::DBTable write_buffer
-  -> lsdb_catalog::DBTable::flush_write_buffer()
-  -> lsdb_storage::TablePartition::insert_rows()
-  -> lsdb_storage::ColumnSegment
+  -> zerocopy byte cast
+  -> Database::insert()
+  -> DBTable write_buffer (auto-flushes at 4096 rows)
+  -> DBTable::flush_write_buffer()
+  -> TablePartition::insert_rows() (columns-outer, rows-inner transposition)
+  -> ColumnSegment::push_dtype_val()
+      -> ZoneMap::update()
+      -> BloomFilter::insert()
+      -> CardinalityEstimator::insert()
+      -> data.extend_from_slice()
 ```
 
-This path is real and writes row-major input into in-memory columnar storage.
+This path is real and writes row-major input into in-memory columnar storage
+with zone maps, Bloom filters, and HyperLogLog cardinality estimators updated
+on every value.
 
 ### Implemented query pipeline
 
 ```text
 SQL text
   -> lsdb_sql::parse()      -- sqlparser wrapper, validates single statement
-  -> lsdb_sql::translate()  -- AST -> UnresolvedPlan (SELECT only)
-  -> lsdb_sql::bind()       -- resolves tables/columns/functions against catalog
-  -> ResolvedPlan
+  -> lsdb_sql::translate()  -- AST -> UnresolvedPlan (SELECT + GROUP BY only)
 ```
 
-`parse()` wraps `sqlparser` and requires exactly one statement.
+The pipeline stops at `UnresolvedPlan`. Binding, planning, and execution are
+all commented out in the CLI.
 
-`translate()` converts the parsed AST into an `UnresolvedPlan`. It supports
-`SELECT` with projections and `GROUP BY`. It explicitly rejects unsupported
-syntax: `WHERE`, `ORDER BY`, `LIMIT`, `DISTINCT`, `JOIN`, window functions,
-CTEs, and subqueries.
-
-`bind()` resolves table and column references against the catalog, validates
-aggregate semantics (GROUP BY rules, type checking for `avg`), and produces a
-`ResolvedPlan` with typed aggregate function variants, resolved column indices,
-and types. Supported functions: `count(*)`, `count(column)`, `avg(column)`.
-
-The pipeline stops at `ResolvedPlan`. The `build_plan` and `optimize` calls in
-`lsdb-cli` are commented out.
-
-### Stub planning and execution path
+### Stub layers
 
 ```text
-ResolvedPlan
-  -> lsdb_optimizer::build_plan()   -- ignores input, returns LogicalPlan::None
-  -> lsdb_optimizer::optimize()     -- pass-through
+UnresolvedPlan
+  -> lsdb_sql::bind()               -- ignores input, returns ResolvedPlan::None
+  -> lsdb_optimizer::build_plan()    -- ignores input, returns LogicalPlan::None
+  -> lsdb_optimizer::optimize()      -- pass-through
   -> lsdb_execution::physical_plan() -- returns PhysicalPlan::None
   -> lsdb_execution::execute()       -- returns QueryResult::default()
 ```
-
-All four steps are no-op stubs.
 
 ## Crate Responsibilities
 
 ### `lsdb-types`
 
-Shared schema, datatype, plan, and result types.
+Shared schema, datatype, plan, execution vector, and result types.
 
-- `DataTypeKind` supports `U64`, `U32`, `U8`, `I64`, `I32`, `I8`, `F32`,
-  `F64`, and `BOOL`.
-- `ColumnDefinition` stores column name, type, and a cached width.
-- `TableSchema` stores ordered columns and precomputes `row_size_bytes`.
+- `DataTypeKind` enum: `U64`, `U32`, `U8`, `I64`, `I32`, `I8`, `F32`, `F64`,
+  `BOOL`. Methods: `parse()` (panics on unknown), `byte_width()`,
+  `format_bytes()`.
+- `ColumnDefinition`: column name, type, and cached width.
+- `TableSchema`: ordered columns with precomputed `row_size_bytes`.
 
 Plan types form a staged pipeline with four distinct representations:
 
-- `UnresolvedPlan` — enum with `Select` variant holding projection
-  (`Vec<UnresolvedSelectItem>`), table name (`String`), and `group_by`
-  (`Vec<UnresolvedExpr>`). `UnresolvedExpr` covers column references
-  (`Column(String)`) and functions (`Function { name, args }`).
-  `UnresolvedFunctionArgs` distinguishes `Star` from `Exprs(Vec<UnresolvedExpr>)`.
+- `UnresolvedPlan` -- enum with `Select` variant holding
+  `Vec<UnresolvedSelectItem>` projection, table name (`String`), and
+  `group_by` (`Vec<UnresolvedExpr>`). `UnresolvedExpr` covers
+  `Column(String)` and `Function { name, args }`.
+  `UnresolvedFunctionArgs` distinguishes `Star` from
+  `Exprs(Vec<UnresolvedExpr>)`.
+- `ResolvedPlan` -- stub enum with only a `None` variant.
+- `LogicalPlan` -- stub enum with only a `None` variant.
+- `PhysicalPlan` -- stub enum with only a `None` variant.
 
-- `ResolvedPlan` — enum with `Select` variant holding resolved projection
-  (`Vec<ResolvedSelectItem>`), `ResolvedTable` (id, name, columns), and
-  resolved `group_by` (`Vec<ResolvedExpr>`). `ResolvedExpr` is either
-  `Column(ResolvedColumn)` or `Aggregate(ResolvedAggregate)`.
-  `ResolvedAggregate` carries a typed `ResolvedAggregateFunction` enum
-  (`CountStar`, `Count { column }`, `Avg { column }`) and a `data_type`.
-  No stringly-typed function dispatch.
+Execution vector types (defined, unused by any real execution):
 
-- `LogicalPlan` — enum with only a `None` variant (stub).
-
-- `PhysicalPlan` — enum with only a `None` variant (stub).
+- `ExecutionVector` trait: `len()`, `as_any()`.
+- `FlatVector<T>`: typed `Vec<T>`, implements `ExecutionVector`.
+- `DataChunk`: `Vec<Box<dyn ExecutionVector>>`, typed column accessor via
+  `column::<T>(idx)`.
 
 - `QueryResult` is an empty struct (placeholder).
 - `OutputTable` wraps a `String`; `from_query_result()` returns an empty
-  output string.
+  string.
 
 ### `lsdb-storage`
 
-Implemented in-memory columnar storage primitives.
+In-memory columnar storage primitives.
 
-- `TablePartition` owns one `ColumnSegment` per schema column plus `row_count`.
-- `TablePartition::insert_rows()` transposes tightly packed row-major input into
-  column-major segment buffers.
-- Partition capacity is fixed at `64 * 2048 = 131_072` rows.
-- `ColumnSegment` stores:
-  - dense `Vec<u8>` column data
-  - source column index
-  - `ZoneMap`
-  - optional Bloom filter
-  - HyperLogLog cardinality estimator
-- `ZoneMap` stores fixed-width min/max bytes for supported primitive types.
-- `varlen.rs` contains an unfinished arena-backed string sketch. The module is
-  compiled but all functions are `todo!()`.
+- `TablePartition` owns one `ColumnSegment` per schema column plus
+  `row_count`. Capacity: `64 * 2048 = 131_072` rows.
+- `TablePartition::insert_rows()` transposes tightly packed row-major input
+  into column-major segment buffers. Iterates columns-outer, rows-inner to
+  keep write target hot in L1 cache.
+- `ColumnSegment` stores dense `Vec<u8>` column data, source column index,
+  and `ColumnSegmentStatistics`.
+- `ColumnSegmentStatistics` bundles:
+  - `ZoneMap` -- min/max as `[u8; 8]`, uses `zerocopy` for typed comparisons.
+  - `BloomFilter` (fastbloom) -- 64 bits, 1 hash function, rapidhash quality.
+  - `CardinalityEstimator` -- HyperLogLog with rapidhash.
+- `varlen.rs` contains an unfinished DuckDB-style string sketch
+  (`StringRef` / `StringBuffer` / `ArenaBuffer`). All functions are
+  `todo!()` and the module is commented out of `lib.rs`.
 
 ### `lsdb-catalog`
 
-Implemented in-memory catalog and table lifecycle layer.
+In-memory catalog and table lifecycle layer.
 
-- `Database` stores tables in a
+- `Database` stores tables in
   `HashMap<String, DBTable, rapidhash::fast::RandomState>`.
-- `create_table_with_schema()` assigns table ids from the current table count.
-- `create_table()` builds a schema from `(&str, &str)` field pairs.
+- `create_table_with_schema()` assigns table ids from current table count.
 - `insert()` appends bytes into a table-local write buffer.
 - `flush_table_writes()` drains the write buffer into partitions.
 - `table()` / `table_mut()` panic if the table does not exist.
@@ -162,175 +156,164 @@ Implemented in-memory catalog and table lifecycle layer.
 - `meta: TableMeta { name, id }`
 - `schema: TableSchema`
 - `table_partitions: Vec<TablePartition>`
-- `stats: TableStatistics`
-- `write_buffer: Vec<u8>`
+- `stats: TableStatistics` (empty struct, no fields)
+- `write_buffer: Vec<u8>` (auto-flushes at `4096 * row_size_bytes`)
 
-`TableStatistics` currently exists but has no fields.
+Write buffer uses `mem::swap` to drain without re-allocating, then restores
+the cleared allocation for reuse.
 
 ### `lsdb-sql`
 
-SQL front-end with real parsing, translation, and binding.
+SQL front-end with real parsing and translation; binding is a stub.
 
-- `parse(sql)` uses `sqlparser::parser::Parser::parse_sql`. Panics on parse
+- `parse(sql)` uses `sqlparser` with `GenericDialect`. Panics on parse
   failure or if the input contains anything other than exactly one statement.
-- `translate(ParsedStatement)` converts the AST into an `UnresolvedPlan`.
-  Supports `SELECT` projections (columns, `count(*)`, `count(col)`,
-  `avg(col)`) and `GROUP BY`. Panics on unsupported syntax.
-- `bind(UnresolvedPlan, &Database)` resolves table and column references against
-  the catalog. Validates aggregate semantics: columns in projections must appear
-  in `GROUP BY` unless inside an aggregate, `avg` requires a numeric column.
-  Produces `ResolvedPlan` with typed `ResolvedAggregateFunction` variants.
-  Panics on semantic errors.
+- `translate(ParsedStatement)` converts the parsed AST into an
+  `UnresolvedPlan`. Supports `SELECT` with projections and `GROUP BY`.
+  Explicitly rejects: `WHERE`, `ORDER BY`, `LIMIT`, `DISTINCT`, `JOIN`,
+  window functions, CTEs, subqueries, and many other constructs.
+- `bind(UnresolvedPlan, &Database)` is a stub: ignores both arguments,
+  returns `ResolvedPlan::None`.
 
-5 tests cover the parse-translate-bind pipeline for GROUP BY queries with
-`count(*)` and `avg()`, plus a rejection test for `avg` on non-numeric columns.
+2 tests cover the parse-translate pipeline for GROUP BY queries with
+`count(*)` and `avg()`.
 
 ### `lsdb-optimizer`
 
 Stub logical plan construction and optimization.
 
-- `build_plan(ResolvedPlan) -> LogicalPlan` ignores its input and returns
-  `LogicalPlan::None`. The full implementation was written and then removed;
-  this is the re-stub state ahead of the next iteration.
-- `optimize(LogicalPlan) -> LogicalPlan` is a pass-through. This is the
-  insertion point for future optimization passes (predicate pushdown, join
-  reordering, etc.).
+- `build_plan(ResolvedPlan) -> LogicalPlan` ignores its input, returns
+  `LogicalPlan::None`.
+- `optimize(LogicalPlan) -> LogicalPlan` is a pass-through.
 
 ### `lsdb-execution`
 
-Physical planning and execution APIs exist, but they do not use storage.
+Stub physical planning and execution.
 
-- `physical_plan()` ignores `LogicalPlan` and returns `PhysicalPlan::None`.
-- `execute()` ignores both the physical plan and the `Database`, and returns
+- `physical_plan()` ignores `LogicalPlan`, returns `PhysicalPlan::None`.
+- `execute()` ignores the physical plan and the `Database`, returns
   `QueryResult::default()`.
 
-The execution benchmark (`benches/query.rs`) loads 100K `Vec3` rows and
-benchmarks `table_scan` execution. It compiles and runs but exercises no real
-execution logic since execution is stubbed.
+The execution benchmark loads 100K `Vec3` rows and benchmarks `execute()`,
+but exercises no real execution logic since execution is stubbed.
 
 ### `lsdb-cli`
 
-The current demo binary wires the crates together:
+Demo binary (64-bit only) that wires crates together:
 
-1. creates a `trips` table with columns `(cab_type: u8, passenger_count: u8,
-   total_amount: f64)`
-2. runs `SELECT passenger_count, avg(total_amount) FROM trips GROUP BY
-   passenger_count` through parse → translate → bind
-3. prints the `Debug` form of the `ResolvedPlan`
+1. Creates a `trips` table with columns `(cab_type: u8, passenger_count: u8,
+   total_amount: f64)`.
+2. Runs `SELECT passenger_count, avg(total_amount) FROM trips GROUP BY
+   passenger_count` through parse and translate.
+3. Prints the `Debug` form of the `UnresolvedPlan`.
 
-The `build_plan` / `optimize` calls are commented out. The execution layer is
-not invoked.
-
-The binary's `main()` is compiled only on 64-bit targets.
+The `bind` / `build_plan` / `optimize` calls are commented out.
 
 ### `lsdb-server`
 
-Networking scaffold only.
-
-- Contains a private `run_server_main()` async function (currently unused).
-- Binds `0.0.0.0:8080`, converts the socket into a Tokio `TcpListener`, and
-  accepts one connection.
-- No protocol handling and no integration with the database crates.
+Networking scaffold only. Contains a private unused `run_server_main()` async
+function that binds `0.0.0.0:8080` via `socket2`, converts to a Tokio
+`TcpListener`, and accepts one connection. No protocol handling, no
+integration with database crates.
 
 ### `lsdb-mvcc`, `lsdb-scheduler`, `lsdb-wal`
 
-These crates have manifests and dependency edges, but their `lib.rs` files are
-empty.
+These crates have manifests and dependency edges, but their `lib.rs` files
+are empty.
 
 ## Storage Model
-
-The storage layer is columnar after flush, but ingestion is row-major bytes.
 
 ```text
 Database
 └── HashMap<String, DBTable, rapidhash::fast::RandomState>
     └── DBTable
-        ├── meta: TableMeta
+        ├── meta: TableMeta { name, id }
         ├── schema: TableSchema
-        ├── table_partitions: Vec<TablePartition>
-        ├── stats: TableStatistics
-        └── write_buffer: Vec<u8>
+        ├── write_buffer: Vec<u8>          (row-major staging)
+        ├── stats: TableStatistics         (empty)
+        └── table_partitions: Vec<TablePartition>
+            └── TablePartition { row_count }
+                └── columns: Vec<ColumnSegment>
+                    ├── data: Vec<u8>               (dense column bytes)
+                    ├── column_def_index: usize
+                    └── stats: ColumnSegmentStatistics
+                        ├── zone_map: ZoneMap        (min/max [u8; 8])
+                        ├── bloom: BloomFilter        (fastbloom, 64-bit)
+                        └── hll: CardinalityEstimator (HyperLogLog)
 ```
 
-### Write Buffer
+### Constants
 
-- Input to `DBTable::insert()` must be a multiple of `schema.row_size_bytes()`.
+| Constant | Value | Purpose |
+|---|---|---|
+| `TABLE_PARTITION_CAPACITY` | 131,072 rows | Max rows per partition |
+| `CAPACITY_ROWS_WRITE_BUFFER` | 4,096 rows | Auto-flush threshold |
+
+### Ingestion
+
+- Input must be a multiple of `schema.row_size_bytes()`.
 - Rows accumulate in `write_buffer`.
-- The buffer auto-flushes once it reaches `4096 * row_size_bytes()` bytes.
-- `flush_write_buffer()` swaps the buffer out, writes it into partitions, then
-  restores the cleared allocation for reuse.
-
-### Partitions
-
-- Each `TablePartition` starts with one `ColumnSegment` per schema column.
-- Partition capacity is fixed at `64 * 2048 = 131_072` rows.
-- When the current partition is full, `DBTable` allocates a new partition and
-  continues writing remaining rows.
-
-### Column Segments
-
-Each `ColumnSegment` is append-only today.
-
-For every inserted value it:
-
-- appends raw bytes to the dense column buffer
-- updates the Bloom filter when present
-- updates the HyperLogLog estimator
-- updates the zone map using the column datatype
-
-The storage crate builds metadata on write, but none of that metadata is
-consulted by the current query path.
+- Auto-flush at 4096 rows drains the buffer into partitions.
+- Transposition is columns-outer / rows-inner for cache locality.
+- Statistics (zone map, Bloom, HLL) update on every inserted value.
+- Statistics are built on write but never consulted by any read path.
 
 ## Dependency Shape
 
 ```text
-lsdb-types
-  -> lsdb-storage
-  -> lsdb-catalog
+lsdb-types  (no deps)
+  -> lsdb-storage  (+ zerocopy, cardinality-estimator, fastbloom, rapidhash)
+  -> lsdb-catalog  (+ rapidhash)
 
-lsdb-sql -> { lsdb-types, lsdb-catalog }
-lsdb-optimizer -> { lsdb-types }
-lsdb-execution -> { lsdb-types, lsdb-storage, lsdb-catalog }
-lsdb-cli -> {
-  lsdb-types,
-  lsdb-storage,
-  lsdb-catalog,
-  lsdb-sql,
-  lsdb-optimizer,
-  lsdb-execution
-}
+lsdb-sql        -> { lsdb-types, lsdb-catalog, sqlparser }
+lsdb-optimizer  -> { lsdb-types }
+lsdb-execution  -> { lsdb-types, lsdb-storage, lsdb-catalog }
+lsdb-cli        -> all of the above
 
-lsdb-mvcc -> { lsdb-types, lsdb-storage }
-lsdb-scheduler -> { lsdb-types, lsdb-execution }
-lsdb-wal -> { lsdb-types, lsdb-storage }
-lsdb-server -> { tokio, socket2 }
+lsdb-mvcc       -> { lsdb-types, lsdb-storage }      (empty)
+lsdb-scheduler  -> { lsdb-types, lsdb-execution }    (empty)
+lsdb-wal        -> { lsdb-types, lsdb-storage }      (empty)
+lsdb-server     -> { tokio, socket2 }                 (no DB deps)
 ```
+
+## Key External Dependencies
+
+| Crate | Version | Purpose |
+|---|---|---|
+| `zerocopy` | 0.8 | Zero-copy byte casting (replaced bytemuck) |
+| `rapidhash` | 4.4 | Fast hashing for HashMap, Bloom, HLL |
+| `fastbloom` | 0.17 | Bloom filter |
+| `cardinality-estimator` | 1 | HyperLogLog |
+| `sqlparser` | 0.61 | SQL AST parsing |
+| `tokio` | 1.50 | Async runtime (server only) |
+| `socket2` | 0.6 | Socket configuration (server only) |
+| `criterion` | 0.5 | Benchmarks |
 
 ## Build and Benchmark Notes
 
-- `Justfile` defines `build`, `run`, `bench`, `check`, `test`, and `fmt`
-  shortcuts.
-- `crates/lsdb-catalog/benches/insert.rs` matches the current storage/catalog
-  APIs and builds.
-- `crates/lsdb-execution/benches/query.rs` compiles and runs but exercises no
-  real execution logic since the execution layer is stubbed.
-- The top-level `build.rs` requires a 64-bit target, but the workspace root is
-  not a package, so that `build.rs` is currently inactive.
+- `justfile` defines `build`, `run`, `bench`, `check`, `test`, and `fmt`.
+- `crates/lsdb-catalog/benches/insert.rs` exercises the real write path with
+  100K `Vec3` rows (single-row and bulk variants).
+- `crates/lsdb-execution/benches/query.rs` compiles and runs but exercises
+  no real execution logic.
+- Nix devShell (`flake.nix`) provides Rust nightly and cargo-nextest.
 
 ## Current Gaps
 
-The largest gaps between the current repository and a functioning database
-engine are:
+The largest gaps between the current repository and a functioning database:
 
-- no durable storage
-- no WAL integration
-- no MVCC implementation
-- no scheduler implementation
-- no logical planning (LogicalPlan is a stub enum with only `None`)
-- no physical planning (PhysicalPlan is a stub enum with only `None`)
-- no execution engine over stored partitions
-- no typed error model; all failure paths panic
-- SQL support limited to SELECT with GROUP BY (no WHERE, ORDER BY, LIMIT, JOIN)
-- `OutputTable` and `QueryResult` are still placeholders
-- no optimization passes (optimize is a pass-through)
-- 5 tests total, all in `lsdb-sql`
+- No typed error model; all failure paths panic (CLAUDE.md mandates `snafu`)
+- SQL binding is a stub (no name resolution, no type checking)
+- No logical planning (`LogicalPlan` is stub enum with only `None`)
+- No physical planning (`PhysicalPlan` is stub enum with only `None`)
+- No execution engine over stored partitions
+- SQL support limited to SELECT with GROUP BY (no WHERE, ORDER BY, LIMIT,
+  JOIN, DISTINCT)
+- No durable storage, no WAL integration
+- No MVCC implementation
+- No scheduler implementation
+- No network protocol (TCP scaffold only)
+- Storage statistics (zone maps, Bloom, HLL) built on write but never read
+- Variable-length string support sketched but unimplemented
+- `QueryResult` and `OutputTable` are empty placeholders
+- 2 tests total, all in `lsdb-sql` translate module
