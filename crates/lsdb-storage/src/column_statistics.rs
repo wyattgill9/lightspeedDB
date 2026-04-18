@@ -11,6 +11,12 @@ pub struct ColumnSegmentStatistics {
     hll: CardinalityEstimator<[u8], rapidhash::quality::RapidHasher<'static>>,
 }
 
+impl Default for ColumnSegmentStatistics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ColumnSegmentStatistics {
     pub fn new() -> Self {
         Self {
@@ -24,13 +30,13 @@ impl ColumnSegmentStatistics {
         }
     }
 
-    pub fn update(&mut self, bytes: &[u8], schema: &TableSchema, idx: usize) {
+    pub fn update(&mut self, bytes: &[u8], schema: &TableSchema, column_def_idx: usize) {
         if let Some(bloom_filter) = &mut self.bloom {
             bloom_filter.insert(bytes);
         }
 
         self.hll.insert(bytes);
         self.zone_map
-            .update(bytes, schema.column_at(idx).data_type());
+            .update(bytes, schema.column_at(column_def_idx).data_type());
     }
 }

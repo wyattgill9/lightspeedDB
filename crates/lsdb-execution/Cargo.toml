@@ -16,5 +16,5 @@ lsdb-storage = { path = "../lsdb-storage" }
 lsdb-types = { path = "../lsdb-types" }
 
 [dev-dependencies]
-bytemuck = { workspace = true }
 criterion = { workspace = true }
+zerocopy = { workspace = true }

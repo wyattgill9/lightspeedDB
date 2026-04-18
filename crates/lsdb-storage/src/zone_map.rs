@@ -1,6 +1,6 @@
 use std::mem::size_of;
 
-use bytemuck::{AnyBitPattern, NoUninit};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 use lsdb_types::DataTypeKind;
 
@@ -47,18 +47,24 @@ impl ZoneMap {
         }
     }
 
-    fn compare_bytes<T: AnyBitPattern + PartialOrd + NoUninit>(&mut self, bytes: &[u8]) {
+    fn compare_bytes<T>(&mut self, bytes: &[u8])
+    where
+        T: FromBytes + IntoBytes + Immutable + KnownLayout + PartialOrd,
+    {
         let size = size_of::<T>();
-        let new: T = bytemuck::pod_read_unaligned(bytes);
-        let cur_min: T = bytemuck::pod_read_unaligned(&self.min_bytes[..size]);
-        let cur_max: T = bytemuck::pod_read_unaligned(&self.max_bytes[..size]);
+        let new: T =
+            T::read_from_bytes(bytes).expect("byte slice length must equal size_of::<T>()");
+        let cur_min: T = T::read_from_bytes(&self.min_bytes[..size])
+            .expect("min_bytes slice length must equal size_of::<T>()");
+        let cur_max: T = T::read_from_bytes(&self.max_bytes[..size])
+            .expect("max_bytes slice length must equal size_of::<T>()");
 
         if new > cur_max {
-            self.max_bytes[..size].copy_from_slice(bytemuck::bytes_of(&new));
+            self.max_bytes[..size].copy_from_slice(new.as_bytes());
         }
 
         if new < cur_min {
-            self.min_bytes[..size].copy_from_slice(bytemuck::bytes_of(&new));
+            self.min_bytes[..size].copy_from_slice(new.as_bytes());
         }
     }
 }

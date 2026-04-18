@@ -21,8 +21,8 @@ fn main() {
 
 fn build_unresolved_plan(sql: &str, _db: &Database) -> lsdb_types::UnresolvedPlan {
     let parsed = lsdb_sql::parse(sql);
-    let unresolved = lsdb_sql::translate(parsed);
-    unresolved
+    lsdb_sql::translate(parsed)
+
     // let logical = lsdb_optimizer::build_plan(resolved);
     // lsdb_optimizer::optimize(logical)
 }

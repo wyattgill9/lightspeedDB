@@ -16,5 +16,5 @@ lsdb-types = { path = "../lsdb-types" }
 rapidhash = { workspace = true }
 
 [dev-dependencies]
-bytemuck = { workspace = true }
 criterion = { workspace = true }
+zerocopy = { workspace = true }

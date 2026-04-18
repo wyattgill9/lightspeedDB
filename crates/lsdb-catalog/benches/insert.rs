@@ -1,10 +1,10 @@
-use bytemuck::{Pod, Zeroable};
 use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_main};
 use lsdb_catalog::DBTable;
 use lsdb_types::TableSchema;
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[repr(C)]
-#[derive(Clone, Copy, Zeroable, Pod)]
+#[derive(Clone, Copy, FromBytes, IntoBytes, Immutable, KnownLayout)]
 struct Vec3 {
     x: f32,
     y: f32,
@@ -48,7 +48,7 @@ fn bench_insert(c: &mut Criterion) {
             fresh_table,
             |mut table| {
                 for point in &points {
-                    table.insert(bytemuck::bytes_of(point));
+                    table.insert(point.as_bytes());
                 }
             },
             BatchSize::LargeInput,
@@ -59,7 +59,7 @@ fn bench_insert(c: &mut Criterion) {
         b.iter_batched(
             fresh_table,
             |mut table| {
-                table.insert(bytemuck::cast_slice(&points));
+                table.insert(points.as_bytes());
             },
             BatchSize::LargeInput,
         );

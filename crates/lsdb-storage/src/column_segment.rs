@@ -1,4 +1,4 @@
-use lsdb_types::{ColumnDefinition, TableSchema};
+use lsdb_types::TableSchema;
 
 use crate::ColumnSegmentStatistics;
 
@@ -6,7 +6,7 @@ use crate::ColumnSegmentStatistics;
 pub struct ColumnSegment {
     data: Vec<u8>,
     column_def_index: usize,
-    stats: ColumnSegmentStatistics    
+    stats: ColumnSegmentStatistics,
 }
 
 impl ColumnSegment {
@@ -14,7 +14,7 @@ impl ColumnSegment {
         Self {
             data: Vec::new(),
             column_def_index: column_index,
-            stats: ColumnSegmentStatistics::new()
+            stats: ColumnSegmentStatistics::new(),
         }
     }
 
@@ -27,11 +27,11 @@ impl ColumnSegment {
         self.data.extend_from_slice(bytes);
     }
 
-    pub fn definition<'a>(&self, schema: &'a TableSchema) -> &'a ColumnDefinition {
-        schema.column_at(self.column_def_index)
-    }
-
     pub fn data(&self) -> &[u8] {
         &self.data
+    }
+
+    pub fn materialize_f32(&self) -> f32 {
+        0.0
     }
 }

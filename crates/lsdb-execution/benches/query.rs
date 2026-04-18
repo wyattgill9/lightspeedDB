@@ -1,11 +1,11 @@
-use bytemuck::{Pod, Zeroable};
 use criterion::{Criterion, Throughput, criterion_group, criterion_main};
 use lsdb_catalog::Database;
 use lsdb_execution::execute;
 use lsdb_types::{OutputTable, PhysicalPlan};
+use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 #[repr(C)]
-#[derive(Clone, Copy, Zeroable, Pod)]
+#[derive(Clone, Copy, FromBytes, IntoBytes, Immutable, KnownLayout)]
 struct Vec3 {
     x: f32,
     y: f32,
@@ -30,7 +30,7 @@ fn loaded_database() -> Database {
         })
         .collect();
 
-    db.insert(TABLE_NAME, bytemuck::cast_slice(&points));
+    db.insert(TABLE_NAME, points.as_bytes());
     db.table_mut(TABLE_NAME).flush_write_buffer();
     db
 }

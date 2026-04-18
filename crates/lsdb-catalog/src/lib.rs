@@ -1,7 +1,7 @@
 pub mod database;
-pub mod table_statistics;
 pub mod table;
+pub mod table_statistics;
 
 pub use database::Database;
-pub use table_statistics::TableStatistics;
 pub use table::DBTable;
+pub use table_statistics::TableStatistics;

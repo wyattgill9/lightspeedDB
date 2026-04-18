@@ -11,7 +11,6 @@ name = "db"
 path = "src/main.rs"
 
 [dependencies]
-bytemuck = { workspace = true }
 lsdb-catalog = { path = "../lsdb-catalog" }
 lsdb-execution = { path = "../lsdb-execution" }
 lsdb-optimizer = { path = "../lsdb-optimizer" }

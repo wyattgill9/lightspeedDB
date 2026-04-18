@@ -7,7 +7,7 @@ repository = "https://github.com/wyattgill9/db"
 authors = ["Wyatt Gill <wyattgill01@outlook.com>"]
 
 [dependencies]
-bytemuck = { workspace = true }
+zerocopy = { workspace = true }
 cardinality-estimator = { workspace = true }
 lsdb-types = { path = "../lsdb-types" }
 fastbloom = { workspace = true }

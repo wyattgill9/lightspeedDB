@@ -5,6 +5,8 @@ pub mod plan;
 pub mod query_result;
 pub mod table_schema;
 
+pub mod exec;
+
 pub use column_definition::ColumnDefinition;
 pub use dtype::DataTypeKind;
 pub use output_table::OutputTable;

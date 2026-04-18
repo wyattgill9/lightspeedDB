@@ -16,6 +16,6 @@ tokio = { version = "1.50.0", features = ["full"] }
 sqlparser = "0.61.0"
 
 # util
-bytemuck = { version = "1.25", features = ["derive"] }
+zerocopy = { version = "0.8", features = ["derive"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 rapidhash = "4.4.1"
